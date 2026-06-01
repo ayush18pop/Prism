@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {IHooks}                  from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager}            from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey}                 from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {Currency}               from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolId, PoolIdLibrary}   from "@uniswap/v4-core/src/types/PoolId.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
@@ -53,27 +54,34 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         int24    tickLower;
         int24    tickUpper;
         uint128  liquidity;
-        address  lpDHolder;    // address that currently holds LP-D (set on purchase/auto-fill)
-        bool     lpDSold;      // true once LP-D has left the LP's wallet
-        bool     settled;      // idempotency guard
+        address  lpDHolder;       // address that currently holds LP-D (set on purchase/auto-fill)
+        uint256  feeShareBpsLPD;  // LP-D fee share in bps; locked at sale time; 0 when LP holds both
+        bool     lpDSold;         // true once LP-D has left the LP's wallet
+        bool     settled;         // idempotency guard
     }
 
     struct StandingBid {
         address  bidder;
-        uint256  pricePerUnit;   // WAD coverage fraction: bidder covers IL up to this fraction
-                                  // e.g. 0.5e18 = willing to absorb up to 50% IL
-        uint256  maxCollateral;  // total USDC pre-deposited (6 dec)
-        uint256  usedCollateral; // USDC already allocated to filled bids (6 dec)
+        uint256  pricePerUnit;    // WAD coverage fraction: bidder covers IL up to this fraction
+        uint256  feeShareBpsLPD;  // LP-D fee share offered by this bid (basis points, 0–10000)
+        uint256  maxCollateral;   // total USDC pre-deposited (6 dec)
+        uint256  usedCollateral;  // USDC already allocated to filled bids (6 dec)
         bool     active;
+    }
+
+    struct FeeShares {
+        uint256 amount0;
+        uint256 amount1;
     }
 
     // ── mappings ─────────────────────────────────────────────────────────────
 
     mapping(bytes32 posId  => Position)    public positions;
     mapping(bytes32 poolId => StandingBid) public standingBids;
-    mapping(bytes32 posId  => uint256)     public lpYCompensation;   // staged USDC for LP-Y holder
+    mapping(bytes32 posId  => uint256)     public lpYCompensation;    // staged USDC for LP-Y holder
     mapping(bytes32 posId  => uint256)     public lpDCollateralVault; // locked USDC from LP-D buyer
     mapping(bytes32 posId  => uint256)     public lpDClaimable;       // LP-D holder's post-settlement claim
+    mapping(bytes32 posId  => FeeShares)   public lpDFeesClaimable;   // staged fee share for LP-D holder
     mapping(bytes32 posId  => address)     public depositor;          // original LP (for token routing)
 
     // poolId → lp → tickLower → tickUpper → posId (fallback for callers that don't pass hookData)
@@ -98,6 +106,8 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
     error NotBidder(bytes32 poolId);
     error LPDAlreadySold(bytes32 posId);
     error CollateralInsufficient(uint256 required, uint256 provided);
+    error InvalidFeeShare(uint256 value);
+    error NoFeesClaimable(bytes32 posId);
 
     // ── events ───────────────────────────────────────────────────────────────
 
@@ -108,12 +118,13 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         int24   tickUpper,
         uint256 collateral   // 0 if no standing bid; actual collateral if auto-filled
     );
-    event LPDAutoPurchased(bytes32 indexed posId, address buyer, uint256 usdcCost);
+    event LPDAutoPurchased(bytes32 indexed posId, address buyer, uint256 usdcCost, uint256 feeShareBpsLPD);
     event LPDSettled(bytes32 indexed posId, uint256 ilCost, uint256 refundedToHolder);
     event LPDLiquidated(bytes32 indexed posId, uint256 collateralConsumed);
     event FeesClaimed(bytes32 indexed posId, address recipient, uint256 fees0, uint256 fees1);
+    event LPDFeesClaimed(bytes32 indexed posId, address recipient, uint256 amount0, uint256 amount1);
     event ILCompensationClaimed(bytes32 indexed posId, address recipient, uint256 usdc);
-    event StandingBidSet(bytes32 indexed poolId, address bidder, uint256 pricePerUnit, uint256 maxCollateral);
+    event StandingBidSet(bytes32 indexed poolId, address bidder, uint256 pricePerUnit, uint256 feeShareBpsLPD, uint256 maxCollateral);
     event StandingBidCancelled(bytes32 indexed poolId, address bidder, uint256 refunded);
 
     // ── constructor ─────────────────────────────────────────────────────────
@@ -202,14 +213,15 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         );
 
         positions[posId] = Position({
-            poolId:         poolId,
-            entrySqrtPrice: sqrtP0,
-            tickLower:      params.tickLower,
-            tickUpper:      params.tickUpper,
-            liquidity:      liquidity,
-            lpDHolder:      sender,
-            lpDSold:        false,
-            settled:        false
+            poolId:          poolId,
+            entrySqrtPrice:  sqrtP0,
+            tickLower:       params.tickLower,
+            tickUpper:       params.tickUpper,
+            liquidity:       liquidity,
+            lpDHolder:       sender,
+            feeShareBpsLPD:  0,
+            lpDSold:         false,
+            settled:         false
         });
         activePos[poolId][sender][params.tickLower][params.tickUpper] = posId;
         depositor[posId] = sender;
@@ -227,12 +239,13 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
             if (bid.pricePerUnit >= maxIL) {
                 uint256 usdcForPos = (bid.maxCollateral * maxIL) / WAD; // rounds DOWN (safe)
                 if (bid.usedCollateral + usdcForPos <= bid.maxCollateral) {
-                    bid.usedCollateral              += usdcForPos;
-                    lpDCollateralVault[posId]        = usdcForPos;
-                    positions[posId].lpDHolder       = bid.bidder;
-                    positions[posId].lpDSold         = true;
+                    bid.usedCollateral               += usdcForPos;
+                    lpDCollateralVault[posId]         = usdcForPos;
+                    positions[posId].lpDHolder        = bid.bidder;
+                    positions[posId].feeShareBpsLPD   = bid.feeShareBpsLPD;
+                    positions[posId].lpDSold          = true;
                     lpDToken.mint(bid.bidder, uint256(posId), liquidity);
-                    emit LPDAutoPurchased(posId, bid.bidder, usdcForPos);
+                    emit LPDAutoPurchased(posId, bid.bidder, usdcForPos, bid.feeShareBpsLPD);
                     emit PositionOpened(posId, sqrtP0, params.tickLower, params.tickUpper, usdcForPos);
                     return (IHooks.afterAddLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
                 }
@@ -353,10 +366,20 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         uint256 fees0 = feeDelta.amount0() > 0 ? uint256(int256(feeDelta.amount0())) : 0;
         uint256 fees1 = feeDelta.amount1() > 0 ? uint256(int256(feeDelta.amount1())) : 0;
 
-        if (fees0 > 0) poolManager.take(key.currency0, msg.sender, fees0);
-        if (fees1 > 0) poolManager.take(key.currency1, msg.sender, fees1);
+        uint256 phi = pos.feeShareBpsLPD; // 0 when LP holds both tokens
+        uint256 lpY0 = fees0 * (10000 - phi) / 10000;
+        uint256 lpY1 = fees1 * (10000 - phi) / 10000;
+        uint256 lpD0 = fees0 - lpY0;
+        uint256 lpD1 = fees1 - lpY1;
 
-        emit FeesClaimed(posId, msg.sender, fees0, fees1);
+        if (lpY0 > 0) poolManager.take(key.currency0, msg.sender, lpY0);
+        if (lpY1 > 0) poolManager.take(key.currency1, msg.sender, lpY1);
+
+        // Stage LP-D share for pull — never push to avoid reentrancy through onERC1155Received
+        if (lpD0 > 0) lpDFeesClaimable[posId].amount0 += lpD0;
+        if (lpD1 > 0) lpDFeesClaimable[posId].amount1 += lpD1;
+
+        emit FeesClaimed(posId, msg.sender, lpY0, lpY1);
     }
 
     function claimILCompensation(bytes32 posId) external nonReentrant {
@@ -372,7 +395,14 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         emit ILCompensationClaimed(posId, msg.sender, comp);
     }
 
-    function setStandingBid(bytes32 poolId, uint256 pricePerUnit, uint256 maxCollateral) external nonReentrant {
+    function setStandingBid(
+        bytes32 poolId,
+        uint256 pricePerUnit,
+        uint256 feeShareBpsLPD,
+        uint256 maxCollateral
+    ) external nonReentrant {
+        if (feeShareBpsLPD > 10000) revert InvalidFeeShare(feeShareBpsLPD);
+
         StandingBid storage existing = standingBids[poolId];
         if (existing.active) {
             // refund unspent collateral to previous bidder before overwriting
@@ -384,13 +414,14 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
 
         IERC20(USDC).transferFrom(msg.sender, address(this), maxCollateral);
         standingBids[poolId] = StandingBid({
-            bidder:         msg.sender,
-            pricePerUnit:   pricePerUnit,
-            maxCollateral:  maxCollateral,
-            usedCollateral: 0,
-            active:         true
+            bidder:          msg.sender,
+            pricePerUnit:    pricePerUnit,
+            feeShareBpsLPD:  feeShareBpsLPD,
+            maxCollateral:   maxCollateral,
+            usedCollateral:  0,
+            active:          true
         });
-        emit StandingBidSet(poolId, msg.sender, pricePerUnit, maxCollateral);
+        emit StandingBidSet(poolId, msg.sender, pricePerUnit, feeShareBpsLPD, maxCollateral);
     }
 
     function cancelStandingBid(bytes32 poolId) external nonReentrant {
@@ -403,20 +434,20 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         emit StandingBidCancelled(poolId, msg.sender, unspent);
     }
 
-    function purchaseLPD(bytes32 posId, uint256 collateralAmount) external nonReentrant {
+    function purchaseLPD(bytes32 posId, uint256 collateralAmount, uint256 feeShareBpsLPD) external nonReentrant {
+        if (feeShareBpsLPD > 10000) revert InvalidFeeShare(feeShareBpsLPD);
+        // collateralAmount is in USDC (6 dec); any non-zero amount accepted — buyer sizes their own exposure
+        if (collateralAmount == 0) revert CollateralInsufficient(1, 0);
+
         Position storage pos = positions[posId];
         if (pos.lpDSold)  revert LPDAlreadySold(posId);
         if (pos.settled)  revert PositionAlreadySettled(posId);
 
-        uint256 required = _computeMaxILCeil(
-            pos.entrySqrtPrice, pos.tickLower, pos.tickUpper, pos.liquidity
-        );
-        if (collateralAmount < required) revert CollateralInsufficient(required, collateralAmount);
-
         // CEI: update state before any external calls
-        lpDCollateralVault[posId] = collateralAmount;
-        pos.lpDHolder = msg.sender;
-        pos.lpDSold   = true;
+        lpDCollateralVault[posId]  = collateralAmount;
+        pos.lpDHolder              = msg.sender;
+        pos.feeShareBpsLPD         = feeShareBpsLPD;
+        pos.lpDSold                = true;
 
         IERC20(USDC).transferFrom(msg.sender, address(this), collateralAmount);
         // depositor must have called lpDToken.setApprovalForAll(hook, true)
@@ -470,5 +501,20 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
 
         lpDClaimable[posId] = 0;
         IERC20(USDC).transfer(msg.sender, claimable);
+    }
+
+    function claimFeesLPD(PoolKey calldata key, bytes32 posId) external nonReentrant {
+        if (positions[posId].lpDHolder != msg.sender) revert NotLPDHolder(posId, msg.sender);
+
+        FeeShares memory claimable = lpDFeesClaimable[posId];
+        if (claimable.amount0 == 0 && claimable.amount1 == 0) revert NoFeesClaimable(posId);
+
+        // CEI: zero before transfers
+        delete lpDFeesClaimable[posId];
+
+        if (claimable.amount0 > 0) IERC20(Currency.unwrap(key.currency0)).transfer(msg.sender, claimable.amount0);
+        if (claimable.amount1 > 0) IERC20(Currency.unwrap(key.currency1)).transfer(msg.sender, claimable.amount1);
+
+        emit LPDFeesClaimed(posId, msg.sender, claimable.amount0, claimable.amount1);
     }
 }

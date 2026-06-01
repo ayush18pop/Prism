@@ -1,0 +1,12 @@
+{
+  "PrismHook":     "",
+  "LPYToken":      "",
+  "LPDToken":      "",
+  "PrismCallback": "",
+  "USDC":          "",
+  "WETH":          "",
+  "PoolManager":   "",
+  "poolId":        "",
+  "deployBlock":   0,
+  "_note":         "Fill after running: forge script script/Deploy.s.sol --rpc-url unichain_sepolia --broadcast"
+}

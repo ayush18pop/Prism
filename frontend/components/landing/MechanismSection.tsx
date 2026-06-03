@@ -21,7 +21,7 @@ export function MechanismSection() {
             number="02"
             accent="text-violet-400"
             headline="Hook splits the position"
-            body="The hook mints two tokens. LP-Y earns all swap fees with zero IL. LP-D absorbs all price risk — backed by USDC collateral from the project."
+            body="The hook mints two tokens. LP-Y earns a protocol-set share of swap fees with zero IL. LP-D earns its share too — plus USDC collateral that pays out only if the LP exits with losses. Both tokens earn."
             tag="LP-Y · LP-D"
           />
           <Step
@@ -39,13 +39,20 @@ export function MechanismSection() {
             <div className="flex-1">
               <p className="text-xs text-amber-400/60 uppercase tracking-[0.2em] mb-2">Standing Bid</p>
               <p className="font-display text-2xl text-white leading-snug">
-                The project sets it once.<br />
-                <span className="text-white/50">Every LP who deposits is automatically IL-free.</span>
+                The project pre-deposits USDC once.<br />
+                <span className="text-white/50">Every LP deposit auto-fills in the same block.</span>
               </p>
             </div>
-            <div className="md:w-64 text-sm text-white/40 leading-relaxed">
-              No marketplace. No matching. No coordination. One setup transaction — then every
-              LP deposit auto-fills the standing bid in the same block.
+            <div className="md:w-72 text-sm text-white/40 leading-relaxed space-y-3">
+              <p>
+                The project gets sticky liquidity without printing tokens or running incentive programs.
+                LPs stay because the IL is covered, not because the yield is temporarily inflated.
+              </p>
+              <p>
+                LP-D buyers earn their fee share on liquidity they didn&apos;t have to provide —
+                and their collateral returns if price barely moves. It is insurance underwriting:
+                collect the premium, pay out only when the event occurs.
+              </p>
             </div>
           </div>
         </div>

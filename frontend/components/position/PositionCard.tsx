@@ -2,7 +2,6 @@
 
 import { formatUnits } from 'viem'
 import { useReadContract } from 'wagmi'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { ILStatusBadge } from './ILStatusBadge'
 import { ClaimPanel } from './ClaimPanel'
 import { usePosition, useVault, useILCompensation, useLPDClaimable, useLPDFeesClaimable } from '@/hooks/usePrismHook'
@@ -16,11 +15,11 @@ interface PositionCardProps {
 }
 
 export function PositionCard({ posId, currentSqrtPrice, account }: PositionCardProps) {
-  const { data: pos }           = usePosition(posId)
-  const { data: vault }         = useVault(posId)
-  const { data: ilComp }        = useILCompensation(posId)
-  const { data: lpdClaimable }  = useLPDClaimable(posId)
-  const { data: lpDFees }       = useLPDFeesClaimable(posId)
+  const { data: pos }          = usePosition(posId)
+  const { data: vault }        = useVault(posId)
+  const { data: ilComp }       = useILCompensation(posId)
+  const { data: lpdClaimable } = useLPDClaimable(posId)
+  const { data: lpDFees }      = useLPDFeesClaimable(posId)
 
   const { data: lpYBal } = useReadContract({
     address: ADDRESSES.LPYToken,
@@ -39,38 +38,62 @@ export function PositionCard({ posId, currentSqrtPrice, account }: PositionCardP
 
   if (!pos) return null
 
-  const settled = pos.settled
-  const lpDSold = pos.lpDSold
+  const { settled, lpDSold, tickLower, tickUpper, lpDHolder } = pos
+
+  const lpDDisplay = lpDBal != null
+    ? lpDBal > 0n ? lpDBal.toString() : lpDSold ? 'sold' : '—'
+    : '—'
+
+  // Determine badge glow color for the hero row
+  const ilFrac = (pos.entrySqrtPrice > 0n && currentSqrtPrice > 0n)
+    ? (currentSqrtPrice >= pos.entrySqrtPrice ? 0 : -0.05) // rough sign for glow color
+    : null
+  const badgeGlow = settled
+    ? ''
+    : lpDSold
+      ? 'shadow-[0_0_32px_rgba(16,185,129,0.15)]'
+      : ilFrac !== null && ilFrac >= 0
+        ? 'shadow-[0_0_32px_rgba(16,185,129,0.12)]'
+        : 'shadow-[0_0_32px_rgba(245,158,11,0.12)]'
 
   return (
-    <Card className={settled ? 'opacity-60' : ''}>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Position</CardTitle>
-          <div className="flex items-center gap-2">
-            {settled ? (
-              <span className="text-xs text-zinc-500 bg-zinc-800 rounded-full px-2 py-0.5">Settled</span>
-            ) : (
-              currentSqrtPrice > 0n && pos.entrySqrtPrice > 0n && (
-                <ILStatusBadge
-                  entrySqrtPrice={pos.entrySqrtPrice}
-                  currentSqrtPrice={currentSqrtPrice}
-                />
-              )
-            )}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-3 text-xs mb-4">
-          <Kv k="posId" v={`${posId.slice(0, 10)}…`} mono />
-          <Kv k="LP-D sold?" v={lpDSold ? 'Yes' : 'No'} />
-          <Kv k="Tick range" v={`[${pos.tickLower}, ${pos.tickUpper}]`} />
-          <Kv k="Collateral vault" v={vault != null ? `${formatUnits(vault, 6)} USDC` : '—'} />
-          <Kv k="LP-Y balance" v={lpYBal != null ? lpYBal.toString() : '—'} />
-          <Kv k="LP-D balance" v={lpDBal != null ? lpDBal.toString() : '—'} />
-        </div>
+    <div className={`liquid-glass rounded-2xl p-5 transition-opacity ${settled ? 'opacity-50' : ''}`}>
 
+      {/* Header: posId */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <p className="text-xs text-white/50 uppercase tracking-[0.2em] mb-1">Position</p>
+          <p className="font-mono text-xs text-white/40">{posId.slice(0, 10)}&hellip;{posId.slice(-6)}</p>
+        </div>
+        {settled && (
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-white/5 text-white/30 border border-white/[0.08]">
+            Settled
+          </span>
+        )}
+      </div>
+
+      {/* IL badge — hero row */}
+      {!settled && currentSqrtPrice > 0n && pos.entrySqrtPrice > 0n && (
+        <div className={`flex justify-center py-4 border-b border-white/5 mb-4 ${badgeGlow}`}>
+          <ILStatusBadge
+            entrySqrtPrice={pos.entrySqrtPrice}
+            currentSqrtPrice={currentSqrtPrice}
+            lpDSold={lpDSold}
+            size="lg"
+          />
+        </div>
+      )}
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 mb-5">
+        <Stat label="Tick Range" value={`[${tickLower}, ${tickUpper}]`} />
+        <Stat label="Collateral Vault" value={vault != null ? `${formatUnits(vault, 6)} USDC` : '—'} />
+        <Stat label="LP-Y Balance" value={lpYBal != null ? lpYBal.toString() : '—'} mono />
+        <Stat label="LP-D" value={lpDDisplay} mono dim={lpDDisplay === 'sold'} />
+      </div>
+
+      {/* ClaimPanel only renders when contracts are deployed — addresses guard inside */}
+      {ADDRESSES.LPYToken && ADDRESSES.LPDToken && ADDRESSES.PrismHook && (
         <ClaimPanel
           posId={posId}
           poolKey={{
@@ -84,19 +107,19 @@ export function PositionCard({ posId, currentSqrtPrice, account }: PositionCardP
           lpdClaimable={lpdClaimable ?? 0n}
           lpDFees={lpDFees ? { amount0: lpDFees[0], amount1: lpDFees[1] } : { amount0: 0n, amount1: 0n }}
           settled={settled}
-          lpDHolder={pos.lpDHolder}
+          lpDHolder={lpDHolder}
           account={account}
         />
-      </CardContent>
-    </Card>
+      )}
+    </div>
   )
 }
 
-function Kv({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
+function Stat({ label, value, mono, dim }: { label: string; value: string; mono?: boolean; dim?: boolean }) {
   return (
     <div>
-      <span className="text-zinc-500">{k}: </span>
-      <span className={mono ? 'font-mono text-zinc-300' : 'text-zinc-300'}>{v}</span>
+      <p className="text-xs text-white/50 uppercase tracking-[0.2em] mb-1">{label}</p>
+      <p className={`text-sm ${mono ? 'font-mono' : ''} ${dim ? 'text-white/30 italic' : 'text-white'}`}>{value}</p>
     </div>
   )
 }

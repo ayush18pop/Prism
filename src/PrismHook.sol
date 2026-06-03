@@ -201,15 +201,19 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         IPoolManager.ModifyLiquidityParams calldata params,
         BalanceDelta,
         BalanceDelta,
-        bytes calldata
+        bytes calldata hookData
     ) external onlyPoolManager whenNotPaused returns (bytes4, BalanceDelta) {
         uint128 liquidity = uint128(uint256(params.liquidityDelta));
         bytes32 poolId    = PoolId.unwrap(key.toId());
 
         (uint160 sqrtP0,,,) = StateLibrary.getSlot0(poolManager, key.toId());
 
+        // If a router encodes the real LP address as the first 32 bytes of hookData, use it.
+        // Falls back to sender for bare PoolManager interactions (tests, direct scripts).
+        address lp = (hookData.length >= 32) ? abi.decode(hookData, (address)) : sender;
+
         bytes32 posId = PositionId.positionId(
-            poolId, sender, params.tickLower, params.tickUpper, block.number
+            poolId, lp, params.tickLower, params.tickUpper, block.number
         );
 
         positions[posId] = Position({
@@ -218,15 +222,15 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
             tickLower:       params.tickLower,
             tickUpper:       params.tickUpper,
             liquidity:       liquidity,
-            lpDHolder:       sender,
+            lpDHolder:       lp,
             feeShareBpsLPD:  0,
             lpDSold:         false,
             settled:         false
         });
-        activePos[poolId][sender][params.tickLower][params.tickUpper] = posId;
-        depositor[posId] = sender;
+        activePos[poolId][lp][params.tickLower][params.tickUpper] = posId;
+        depositor[posId] = lp;
 
-        lpYToken.mint(sender, uint256(posId), liquidity);
+        lpYToken.mint(lp, uint256(posId), liquidity);
 
         StandingBid storage bid = standingBids[poolId];
         if (bid.active) {
@@ -252,7 +256,7 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
             }
         }
 
-        lpDToken.mint(sender, uint256(posId), liquidity);
+        lpDToken.mint(lp, uint256(posId), liquidity);
         emit PositionOpened(posId, sqrtP0, params.tickLower, params.tickUpper, 0);
         return (IHooks.afterAddLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
     }
@@ -272,7 +276,9 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
             : activePos[poolId][sender][params.tickLower][params.tickUpper];
 
         Position storage pos = positions[posId];
-        if (pos.settled) revert PositionAlreadySettled(posId);
+        // settleLPD may have already handled the vault (RSC force-settle or voluntary).
+        // Allow the LP to exit the pool; vault was already drawn, nothing left to do here.
+        if (pos.settled) return IHooks.beforeRemoveLiquidity.selector;
 
         (uint160 sqrtPriceCurrent,,,) = StateLibrary.getSlot0(poolManager, key.toId());
         int256 ilRaw = ILMath._computeIL(pos.entrySqrtPrice, sqrtPriceCurrent, pos.liquidity);
@@ -408,6 +414,7 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
             // refund unspent collateral to previous bidder before overwriting
             uint256 unspent = existing.maxCollateral - existing.usedCollateral;
             existing.active = false;
+            existing.usedCollateral = existing.maxCollateral; // prevents double-refund via cancelStandingBid
             if (unspent > 0) IERC20(USDC).transfer(existing.bidder, unspent);
             emit StandingBidCancelled(poolId, existing.bidder, unspent);
         }
@@ -430,6 +437,7 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
 
         uint256 unspent = bid.maxCollateral - bid.usedCollateral;
         bid.active = false;
+        bid.usedCollateral = bid.maxCollateral; // zero out unspent so re-calls refund nothing
         if (unspent > 0) IERC20(USDC).transfer(msg.sender, unspent);
         emit StandingBidCancelled(poolId, msg.sender, unspent);
     }

@@ -11,22 +11,22 @@ export function DemoCallout() {
       <div className="relative mx-auto max-w-4xl text-center">
         <p className="text-xs text-white/30 uppercase tracking-[0.2em] mb-8">Demo scenario</p>
 
-        {/* The number */}
+        {/* The outcome — what the LP paid */}
         <p className="font-display text-[10rem] md:text-[14rem] text-white leading-none tracking-tight">
-          $320
+          $0
         </p>
 
         <p className="font-display text-2xl md:text-3xl text-white/50 mt-4 mb-6">
-          of impermanent loss.
+          IL deducted from the LP.
         </p>
         <p className="font-display text-2xl md:text-3xl text-white">
-          Zero dollars deducted from the LP.
+          Price dropped 25%. The vault covered it.
         </p>
 
         <p className="mt-8 text-sm text-white/30 max-w-lg mx-auto leading-relaxed">
-          ETH drops from $2,000 to $1,500. The position accrues $320 of IL.
-          The LP exits. The LP-D vault covers it. The LP receives full value.
-          One click.
+          ETH falls from $2,000 to $1,500. The LP removes liquidity.
+          The IL is drawn from the LP-D collateral vault — not from the LP&apos;s principal.
+          The LP exits with full value.
         </p>
 
         <Link

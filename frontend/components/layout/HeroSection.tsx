@@ -94,9 +94,9 @@ export function HeroSection() {
 
         {/* Subtext */}
         <p className="animate-fade-rise-delay mt-8 text-base sm:text-lg max-w-2xl leading-relaxed text-white/60">
-          Every deposit splits into two tokens — one that earns fees with zero
-          price risk, one that absorbs IL with USDC backing. Automated by
-          Reactive Network. One transaction.
+          LP-Y earns swap fees with zero IL exposure. LP-D earns its share too —
+          plus USDC collateral drawn only if price moves adversely at exit.
+          IL comes out of the vault, not your principal. One transaction.
         </p>
 
         {/* CTA */}

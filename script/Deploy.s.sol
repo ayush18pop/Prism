@@ -14,6 +14,8 @@ import {LPYToken}        from "../src/LPYToken.sol";
 import {LPDToken}        from "../src/LPDToken.sol";
 import {PrismHook}       from "../src/PrismHook.sol";
 import {PrismCallback}   from "../src/PrismCallback.sol";
+import {PrismRouter}     from "../src/PrismRouter.sol";
+import {MockUSDC}        from "../test/MockUSDC.sol";
 
 /// @notice 6-step deployment for Prism on Unichain Sepolia.
 ///
@@ -38,11 +40,27 @@ contract Deploy is Script {
     function run() external {
         address deployer = vm.envAddress("DEPLOYER_ADDRESS");
         address pmAddr   = vm.envAddress("POOL_MANAGER_ADDRESS");
-        address usdc     = vm.envAddress("USDC_ADDRESS");
         address weth     = vm.envAddress("WETH_ADDRESS");
         address rscAddr  = vm.envOr("RSC_ADDRESS", address(0)); // may be 0 pre-RSC deploy
 
+        // USDC_ADDRESS is optional: if unset, MockUSDC is deployed and its address is printed.
+        // After first run: set USDC_ADDRESS=<printed address> in .env for RSC and frontend.
+        string memory usdcEnv = vm.envOr("USDC_ADDRESS", string(""));
+        bool deployMockUsdc   = bytes(usdcEnv).length == 0;
+
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
+
+        // ── Step 0 (conditional): Deploy MockUSDC if no USDC address supplied ─
+        address usdc;
+        if (deployMockUsdc) {
+            MockUSDC mockUsdc = new MockUSDC();
+            usdc = address(mockUsdc);
+            console.log("MockUSDC deployed (open mint, demo only):", usdc);
+            console.log("  --> Set USDC_ADDRESS=%s in .env before re-running", usdc);
+        } else {
+            usdc = vm.parseAddress(usdcEnv);
+            console.log("Using existing USDC:", usdc);
+        }
 
         // ── Step 1: Deploy token contracts ───────────────────────────────────
         LPYToken lpY = new LPYToken();
@@ -92,6 +110,10 @@ contract Deploy is Script {
             console.log("NOTICE: call hook.setCallbackContract(callbackAddr) after RSC deploy");
         }
 
+        // ── Step 7: Deploy PrismRouter ────────────────────────────────────────
+        PrismRouter router = new PrismRouter(IPoolManager(pmAddr));
+        console.log("PrismRouter:", address(router));
+
         vm.stopBroadcast();
 
         // ── Summary ───────────────────────────────────────────────────────────
@@ -100,9 +122,14 @@ contract Deploy is Script {
         console.log("LPDToken:      ", address(lpD));
         console.log("PrismHook:     ", address(hook));
         console.log("PrismCallback: ", address(callback));
+        console.log("PrismRouter:   ", address(router));
         console.log("USDC:          ", usdc);
         console.log("WETH:          ", weth);
         console.log("PoolManager:   ", pmAddr);
+        if (deployMockUsdc) {
+            console.log("\nIMPORTANT: MockUSDC deployed. Mint to demo wallets:");
+            console.log("  cast send %s 'mint(address,uint256)' <wallet> 10000000000 --rpc-url unichain_sepolia --private-key $PRIVATE_KEY", usdc);
+        }
         console.log("\nUpdate deployments/unichain-sepolia.json with the above.");
     }
 }

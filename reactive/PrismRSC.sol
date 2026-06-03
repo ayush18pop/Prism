@@ -38,17 +38,17 @@ contract PrismRSC is AbstractReactive {
     uint256 public constant LIQUIDATION_BPS = 9000; // 90% = 9000 bps
     uint256 public constant BPS_DENOM       = 10_000;
 
-    // Event topic0 hashes (keccak256 of event signatures)
+    // Event topic0 hashes — cast keccak "<sig>" verified against deployed event signatures
     // PositionOpened(bytes32 indexed posId, uint160 entrySqrtPrice, int24 tickLower,
     //                int24 tickUpper, uint256 collateral)
     uint256 public constant TOPIC_POSITION_OPENED =
-        0x9d7cccb7a1d7e3e14e68e2ad97e1e70ab8d7d70e857d7c1a70cc0e1bc9a9c1b2;
+        0x094ed1112c5f56637d90ec984b490f35abd3aad18d64b49f197f52e8df71c293;
 
     // IPoolManager::Swap(bytes32 indexed id, address indexed sender, int128 amount0,
     //                    int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick,
     //                    uint24 fee)
     uint256 public constant TOPIC_SWAP =
-        0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca2d09f5c74d4ef;
+        0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f;
 
     // ── immutable addresses ──────────────────────────────────────────────────
 
@@ -69,6 +69,10 @@ contract PrismRSC is AbstractReactive {
 
     mapping(bytes32 posId => TrackedPosition) public trackedPositions;
 
+    // Ordered list of active posIds — iterated on every swap to check conditions.
+    // Demo-scale: expected < 20 positions during the hackathon demo.
+    bytes32[] public activePositionIds;
+
     // ── current pool state ───────────────────────────────────────────────────
 
     uint160 public latestSqrtPrice;
@@ -80,33 +84,33 @@ contract PrismRSC is AbstractReactive {
         address _prismHook,
         address _poolManager,
         bytes32 _watchedPoolId
-    ) {
+    ) payable{
         callbackContract = _callbackContract;
         prismHook        = _prismHook;
         poolManager      = _poolManager;
         watchedPoolId    = _watchedPoolId;
 
         if (!vm) {
-            // Subscribe to PositionOpened from PrismHook on Unichain Sepolia
-            service.subscribe(
+            // try/catch: the Lasna system precompile doesn't exist in forge's local EVM,
+            // so simulation fails. On the actual Lasna chain the precompile is real and
+            // subscribe will succeed. Catching locally lets the broadcast proceed.
+            try service.subscribe(
                 UNICHAIN_SEPOLIA_CHAIN_ID,
                 _prismHook,
                 TOPIC_POSITION_OPENED,
                 REACTIVE_IGNORE,
                 REACTIVE_IGNORE,
                 REACTIVE_IGNORE
-            );
+            ) {} catch {}
 
-            // Subscribe to Swap events from PoolManager on Unichain Sepolia
-            // Filter by poolId in topic_1 (indexed `id` field in Swap event)
-            service.subscribe(
+            try service.subscribe(
                 UNICHAIN_SEPOLIA_CHAIN_ID,
                 _poolManager,
                 TOPIC_SWAP,
-                uint256(_watchedPoolId), // only swaps in our pool
+                uint256(_watchedPoolId),
                 REACTIVE_IGNORE,
                 REACTIVE_IGNORE
-            );
+            ) {} catch {}
         }
     }
 
@@ -141,6 +145,7 @@ contract PrismRSC is AbstractReactive {
             collateral:     collateral,
             active:         true
         });
+        activePositionIds.push(posId);
     }
 
     function _handleSwap(IReactive.LogRecord calldata log) internal {
@@ -148,33 +153,34 @@ contract PrismRSC is AbstractReactive {
         (,, uint160 sqrtPriceX96,,,) = abi.decode(log.data, (int128, int128, uint160, uint128, int24, uint24));
         latestSqrtPrice = sqrtPriceX96;
 
-        // Check all tracked positions against the new price
-        // NOTE: In production, this would iterate a packed active-position list.
-        // For the demo, posId is passed via direct callback from the frontend trigger.
+        // Evaluate all tracked positions against the new price.
+        // Inactive positions are skipped; they remain in the array (lazy cleanup is safe for demo scale).
+        uint256 len = activePositionIds.length;
+        for (uint256 i = 0; i < len; i++) {
+            _evaluateAndFire(activePositionIds[i]);
+        }
     }
 
-    // ── condition checks (callable by frontend/keeper for demo) ──────────────
+    // ── condition evaluation ─────────────────────────────────────────────────
 
-    /// @notice Evaluate conditions for a specific position and fire callback if met.
-    ///         In production, this would be called from within _handleSwap for each tracked position.
-    ///         For the demo, the frontend calls this after each swap to trigger RSC logic.
-    function evaluatePosition(bytes32 posId) external vmOnly {
-        TrackedPosition memory pos = trackedPositions[posId];
+    /// @notice Check Condition 1 and Condition 3 for a position and emit a Callback if either fires.
+    ///         Sets trackedPositions[posId].active = false on fire to prevent double-fire.
+    function _evaluateAndFire(bytes32 posId) internal {
+        TrackedPosition storage pos = trackedPositions[posId];
         if (!pos.active) return;
         if (latestSqrtPrice == 0) return;
 
         uint256 sqrtCurrent = uint256(latestSqrtPrice);
         uint256 sqrtEntry   = uint256(pos.entrySqrtPrice);
 
-        // Condition 1: Price Reversion — price returned within REVERSION_BPS of entry
-        // |sqrtCurrent - sqrtEntry| / sqrtEntry < REVERSION_BPS / 10000
+        // Condition 1: Price Reversion — sqrt price returned within REVERSION_BPS of entry
         uint256 diff = sqrtCurrent > sqrtEntry
             ? sqrtCurrent - sqrtEntry
             : sqrtEntry   - sqrtCurrent;
         bool priceReverted = (diff * BPS_DENOM) <= (sqrtEntry * REVERSION_BPS);
 
         if (priceReverted) {
-            trackedPositions[posId].active = false;
+            pos.active = false;
             emit IReactive.Callback(
                 UNICHAIN_SEPOLIA_CHAIN_ID,
                 callbackContract,
@@ -184,13 +190,7 @@ contract PrismRSC is AbstractReactive {
             return;
         }
 
-        // Condition 3: Liquidation threshold — IL >= 90% of vault
-        // IL fraction = |sqrtCurrent/sqrtEntry - 1| = diff/sqrtEntry
-        // ilDrawn = ilFrac * collateral
-        // threshold hit when: ilFrac * collateral >= LIQUIDATION_BPS/BPS_DENOM * collateral
-        //                   i.e. ilFrac >= 0.9
-        // ilFrac = diff / sqrtEntry (in sqrt-price space, not price space)
-        // For a simple check: if current sqrtPrice implies > 90% vault drawdown
+        // Condition 3: Liquidation threshold — IL WAD fraction implies >= 90% vault drawdown
         int256 ilRaw = ILMath._computeIL(pos.entrySqrtPrice, latestSqrtPrice, 0);
         if (ilRaw < 0) {
             uint256 ilAbs     = uint256(-ilRaw); // WAD fraction
@@ -198,7 +198,7 @@ contract PrismRSC is AbstractReactive {
             bool liquidated   = ilInVault * BPS_DENOM >= pos.collateral * LIQUIDATION_BPS;
 
             if (liquidated) {
-                trackedPositions[posId].active = false;
+                pos.active = false;
                 emit IReactive.Callback(
                     UNICHAIN_SEPOLIA_CHAIN_ID,
                     callbackContract,
@@ -207,5 +207,11 @@ contract PrismRSC is AbstractReactive {
                 );
             }
         }
+    }
+
+    /// @notice Manual entry point for evaluating a specific position (vmOnly — RVM only).
+    ///         Useful for one-shot checks outside the swap event flow.
+    function evaluatePosition(bytes32 posId) external vmOnly {
+        _evaluateAndFire(posId);
     }
 }

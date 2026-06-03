@@ -16,8 +16,8 @@ export function PitchSection() {
             <p className="text-sm text-white/50 leading-relaxed">
               Every Uniswap LP is taking a bet they didn&apos;t sign up for. The moment price moves,
               they lose value relative to just holding — not because they did anything wrong,
-              but because that&apos;s how AMMs work. There&apos;s no way to opt out of price risk
-              while staying in the pool.
+              but because AMMs require it. Fees earn. IL erodes. There is no way to separate
+              the two without leaving the pool entirely.
             </p>
           </div>
 
@@ -32,9 +32,9 @@ export function PitchSection() {
             </p>
             <p className="text-sm text-white/50 leading-relaxed">
               Liquidity mining works — until emissions stop. Then LPs leave. The liquidity
-              was rented, not loyal. Every project is on a treadmill: print tokens, attract
-              LPs, watch them exit when the incentive dries up. There&apos;s no mechanism for
-              genuinely sticky liquidity.
+              was rented, not loyal. Every project is on the same treadmill: print tokens,
+              attract LPs, watch them exit when the yield dries up. IL coverage is the only
+              thing that makes liquidity stay without paying for it in perpetuity.
             </p>
           </div>
         </div>
@@ -42,8 +42,9 @@ export function PitchSection() {
         {/* Resolution */}
         <div className="mt-24 text-center">
           <p className="font-display text-4xl md:text-5xl text-white leading-tight">
-            These problems are mirror images.<br />
-            <span className="italic text-violet-300">Prism solves both. In a single hook.</span>
+            One side wants protection.<br />
+            The other wants yield on liquidity they don&apos;t have to provide.<br />
+            <span className="italic text-violet-300">Prism makes both possible. One hook.</span>
           </p>
         </div>
       </div>

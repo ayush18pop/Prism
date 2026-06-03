@@ -797,20 +797,31 @@ contract PrismHookTest is Test {
 
     // ── Coverage tests: beforeRemoveLiquidity ────────────────────────────────
 
-    // Test 31: removing from a pre-settled position reverts PositionAlreadySettled in the hook.
-    // PoolManager wraps hook reverts in WrappedError so we only assert any revert.
-    function test_beforeRemoveLiquidity_alreadySettled_reverts() public {
+    // Test 31: after RSC force-settle, LP must still be able to exit the pool.
+    // beforeRemoveLiquidity returns early (vault already handled); afterRemoveLiquidity cleans up.
+    // This verifies the fix for the "LP permanently locked after settleLPD" bug.
+    function test_beforeRemoveLiquidity_afterForcedSettle_allowsExit() public {
         vm.prank(bidder);
         hook.setStandingBid(poolId, 0.5e18, 3000, 50_000e6);
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
 
-        // Force-settle via callback before liquidity is removed
+        // Force-settle via RSC callback before LP removes liquidity
+        _movePrice(true); // drop price so IL is non-zero
         vm.prank(callback);
         hook.settleLPD(posId);
 
-        // PoolManager wraps the PositionAlreadySettled revert in WrappedError
-        vm.expectRevert();
-        _remove(posId, TICK_LOWER, TICK_UPPER, 1e18);
+        assertTrue(hook.getPosition(posId).settled, "position settled by RSC");
+        uint256 comp = hook.lpYCompensation(posId);
+        assertGt(comp, 0, "IL compensation staged by settleLPD");
+
+        // LP must be able to exit the pool even though settled=true
+        // beforeRemoveLiquidity should return cleanly, not revert
+        _remove(posId, TICK_LOWER, TICK_UPPER, 1e18); // must not revert
+
+        // LP-Y holder claims their USDC compensation
+        vm.prank(address(modifyRouter));
+        hook.claimILCompensation(posId);
+        assertEq(usdc.balanceOf(address(modifyRouter)), comp, "LP received full IL comp after forced settle + exit");
     }
 
     // ── Coverage tests: bid capacity exhaustion ──────────────────────────────

@@ -33,94 +33,93 @@ export function ClaimPanel({ posId, poolKey, ilComp, lpdClaimable, lpDFees, sett
   const [error, setError] = useState('')
 
   const isLPDHolder = lpDHolder.toLowerCase() === account.toLowerCase()
-  const hasLPDFees = lpDFees.amount0 > 0n || lpDFees.amount1 > 0n
+  const hasLPDFees  = lpDFees.amount0 > 0n || lpDFees.amount1 > 0n
 
-  async function claimIL() {
-    setLoading('il'); setError('')
-    try {
-      const tx = await write({ address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'claimILCompensation', args: [posId], chainId: 1301 })
-      await client?.waitForTransactionReceipt({ hash: tx })
-    } catch (e: unknown) { setError((e as {shortMessage?: string; message: string}).shortMessage ?? (e as Error).message) }
-    finally { setLoading(null) }
-  }
-
-  async function claimLPD() {
-    setLoading('lpd'); setError('')
-    try {
-      const tx = await write({ address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'claimLPDCollateral', args: [posId], chainId: 1301 })
-      await client?.waitForTransactionReceipt({ hash: tx })
-    } catch (e: unknown) { setError((e as {shortMessage?: string; message: string}).shortMessage ?? (e as Error).message) }
-    finally { setLoading(null) }
-  }
-
-  async function settle() {
-    setLoading('settle'); setError('')
-    try {
-      const tx = await write({ address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'settleLPD', args: [posId], chainId: 1301 })
-      await client?.waitForTransactionReceipt({ hash: tx })
-    } catch (e: unknown) { setError((e as {shortMessage?: string; message: string}).shortMessage ?? (e as Error).message) }
-    finally { setLoading(null) }
-  }
-
-  async function claimFeesLPD() {
-    setLoading('fees'); setError('')
-    try {
-      const tx = await write({ address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'claimFeesLPD', args: [poolKey, posId], chainId: 1301 })
-      await client?.waitForTransactionReceipt({ hash: tx })
-    } catch (e: unknown) { setError((e as {shortMessage?: string; message: string}).shortMessage ?? (e as Error).message) }
-    finally { setLoading(null) }
-  }
-
+  // Contracts not deployed — no actions possible
+  if (!ADDRESSES.PrismHook) return null
   if (ilComp === 0n && lpdClaimable === 0n && !hasLPDFees && !isLPDHolder) return null
 
+  // Safe to use after the guard above
+  const hookAddress = ADDRESSES.PrismHook
+
+  async function exec(key: string, fn: () => Promise<`0x${string}`>) {
+    setLoading(key); setError('')
+    try {
+      const tx = await fn()
+      await client?.waitForTransactionReceipt({ hash: tx })
+    } catch (e: unknown) {
+      setError((e as { shortMessage?: string; message: string }).shortMessage ?? (e as Error).message)
+    } finally { setLoading(null) }
+  }
+
   return (
-    <div className="space-y-2 border-t border-zinc-800 pt-3">
+    <div className="space-y-2 border-t border-white/8 pt-4">
       {error && <p className="text-red-400 text-xs">{error}</p>}
 
       {ilComp > 0n && (
-        <div className="flex items-center justify-between rounded-lg bg-emerald-950/30 border border-emerald-900/40 px-3 py-2">
+        <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-4 py-3">
           <div>
-            <p className="text-xs text-emerald-400 font-medium">IL Compensation Ready</p>
-            <p className="text-xs text-zinc-400">{formatUnits(ilComp, 6)} USDC</p>
+            <p className="text-xs text-emerald-400 font-medium uppercase tracking-wide">IL Compensation Ready</p>
+            <p className="text-sm font-mono text-white mt-0.5">{formatUnits(ilComp, 6)} USDC</p>
           </div>
-          <Button size="sm" onClick={claimIL} loading={loading === 'il'} className="bg-emerald-700 hover:bg-emerald-600">
+          <Button
+            size="sm"
+            loading={loading === 'il'}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white"
+            onClick={() => exec('il', () => write({ address: hookAddress, abi: PRISM_HOOK_ABI, functionName: 'claimILCompensation', args: [posId], chainId: 1301 }))}
+          >
             Claim
           </Button>
         </div>
       )}
 
       {isLPDHolder && !settled && lpdClaimable === 0n && (
-        <div className="flex items-center justify-between rounded-lg bg-zinc-800/50 border border-zinc-700 px-3 py-2">
-          <p className="text-xs text-zinc-400">You hold LP-D — settle to unlock collateral</p>
-          <Button size="sm" variant="secondary" onClick={settle} loading={loading === 'settle'}>
+        <div className="flex items-center justify-between bg-white/[0.02] border border-white/8 rounded-xl px-4 py-3">
+          <p className="text-xs text-white/60">You hold LP-D &mdash; settle to unlock collateral</p>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={loading === 'settle'}
+            onClick={() => exec('settle', () => write({ address: hookAddress, abi: PRISM_HOOK_ABI, functionName: 'settleLPD', args: [posId], chainId: 1301 }))}
+          >
             Settle
           </Button>
         </div>
       )}
 
       {isLPDHolder && lpdClaimable > 0n && (
-        <div className="flex items-center justify-between rounded-lg bg-violet-950/30 border border-violet-900/40 px-3 py-2">
+        <div className="flex items-center justify-between bg-violet-500/5 border border-violet-500/20 rounded-xl px-4 py-3">
           <div>
-            <p className="text-xs text-violet-400 font-medium">LP-D Collateral Claimable</p>
-            <p className="text-xs text-zinc-400">{formatUnits(lpdClaimable, 6)} USDC</p>
+            <p className="text-xs text-violet-400 font-medium uppercase tracking-wide">LP-D Collateral</p>
+            <p className="text-sm font-mono text-white mt-0.5">{formatUnits(lpdClaimable, 6)} USDC</p>
           </div>
-          <Button size="sm" onClick={claimLPD} loading={loading === 'lpd'} className="bg-violet-700 hover:bg-violet-600">
+          <Button
+            size="sm"
+            loading={loading === 'lpd'}
+            className="bg-violet-600 hover:bg-violet-500 text-white"
+            onClick={() => exec('lpd', () => write({ address: hookAddress, abi: PRISM_HOOK_ABI, functionName: 'claimLPDCollateral', args: [posId], chainId: 1301 }))}
+          >
             Claim
           </Button>
         </div>
       )}
 
       {isLPDHolder && hasLPDFees && (
-        <div className="flex items-center justify-between rounded-lg bg-amber-950/30 border border-amber-900/40 px-3 py-2">
+        <div className="flex items-center justify-between bg-amber-500/5 border border-amber-500/20 rounded-xl px-4 py-3">
           <div>
-            <p className="text-xs text-amber-400 font-medium">LP-D Fee Share Ready</p>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-amber-400 font-medium uppercase tracking-wide">LP-D Fee Share</p>
+            <p className="text-xs text-white/40 mt-0.5">
               {lpDFees.amount0 > 0n && <span>{formatUnits(lpDFees.amount0, 18)} token0</span>}
-              {lpDFees.amount0 > 0n && lpDFees.amount1 > 0n && <span> · </span>}
+              {lpDFees.amount0 > 0n && lpDFees.amount1 > 0n && ' · '}
               {lpDFees.amount1 > 0n && <span>{formatUnits(lpDFees.amount1, 18)} token1</span>}
             </p>
           </div>
-          <Button size="sm" onClick={claimFeesLPD} loading={loading === 'fees'} className="bg-amber-700 hover:bg-amber-600">
+          <Button
+            size="sm"
+            loading={loading === 'fees'}
+            className="bg-amber-600 hover:bg-amber-500 text-white"
+            onClick={() => exec('fees', () => write({ address: hookAddress, abi: PRISM_HOOK_ABI, functionName: 'claimFeesLPD', args: [poolKey, posId], chainId: 1301 }))}
+          >
             Claim Fees
           </Button>
         </div>

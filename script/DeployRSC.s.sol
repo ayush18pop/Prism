@@ -35,7 +35,10 @@ contract DeployRSC is Script {
 
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
 
-        PrismRSC rsc = new PrismRSC(
+        // Send 1 lREACT with deployment so the RSC can afford the subscribe() calls
+        // in its constructor. The system contract at 0xfffFfF deducts from the RSC's
+        // own balance, not the deployer's balance.
+        PrismRSC rsc = new PrismRSC{value: 1 ether}(
             callbackContract,
             prismHook,
             poolManager,

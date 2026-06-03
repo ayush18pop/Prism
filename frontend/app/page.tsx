@@ -1,6 +1,7 @@
 import { HeroSection } from '@/components/layout/HeroSection'
 import { PitchSection } from '@/components/landing/PitchSection'
 import { MechanismSection } from '@/components/landing/MechanismSection'
+import { TwoSidesSection } from '@/components/landing/TwoSidesSection'
 import { DemoCallout } from '@/components/landing/DemoCallout'
 
 export default function LandingPage() {
@@ -9,6 +10,7 @@ export default function LandingPage() {
       <HeroSection />
       <PitchSection />
       <MechanismSection />
+      <TwoSidesSection />
       <DemoCallout />
       <footer className="border-t border-white/5 bg-black py-8 text-center">
         <p className="text-xs text-white/20 tracking-[0.15em] uppercase">

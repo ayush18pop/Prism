@@ -65,21 +65,31 @@ const POSITION_OPENED_EVENT = parseAbiItem(
   'event PositionOpened(bytes32 indexed posId, uint160 entrySqrtPrice, int24 tickLower, int24 tickUpper, uint256 collateral)'
 )
 
+const CHUNK_SIZE = 5000n
+
 export function usePositionLogs() {
   const client = usePublicClient({ chainId: 1301 })
   return useQuery({
     queryKey: ['positionOpened', ADDRESSES.PrismHook],
     queryFn: async () => {
       if (!client || !ADDRESSES.PrismHook) return []
-      return client.getLogs({
-        address: ADDRESSES.PrismHook,
-        event: POSITION_OPENED_EVENT,
-        fromBlock: ADDRESSES.deployBlock,
-        toBlock: 'latest',
-      })
+      const currentBlock = await client.getBlockNumber()
+      const allLogs = []
+      for (let from = ADDRESSES.deployBlock; from <= currentBlock; from += CHUNK_SIZE) {
+        const to = from + CHUNK_SIZE - 1n > currentBlock ? currentBlock : from + CHUNK_SIZE - 1n
+        const chunk = await client.getLogs({
+          address: ADDRESSES.PrismHook,
+          event: POSITION_OPENED_EVENT,
+          fromBlock: from,
+          toBlock: to,
+        })
+        allLogs.push(...chunk)
+      }
+      console.log('[usePositionLogs] found', allLogs.length, 'events across', String((currentBlock - ADDRESSES.deployBlock) / CHUNK_SIZE + 1n), 'chunks')
+      return allLogs
     },
     enabled: !!client && !!ADDRESSES.PrismHook,
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   })
 }
 

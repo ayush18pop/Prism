@@ -3,11 +3,12 @@
 
 const Q96 = 2n ** 96n
 
-export function sqrtPriceX96ToPrice(sqrtPriceX96: bigint, token0Decimals = 18, token1Decimals = 6): number {
-  // price = (sqrtPriceX96 / 2^96)^2 * 10^(d0-d1)
-  const ratio = (sqrtPriceX96 * sqrtPriceX96) / (Q96 * Q96)
-  const decimalAdj = 10 ** (token1Decimals - token0Decimals)
-  return Number(ratio) * decimalAdj
+export function sqrtPriceX96ToPrice(sqrtPriceX96: bigint, token0Decimals = 6, token1Decimals = 6): number {
+  // price (token1 per token0 in human units) = (sqrtPriceX96 / 2^96)^2 * 10^(d0 - d1)
+  // Use float division — BigInt integer truncation loses all sub-unit precision near price=1
+  const sqrtRatio = Number(sqrtPriceX96) / Number(Q96)
+  const rawPrice  = sqrtRatio * sqrtRatio
+  return rawPrice * 10 ** (token0Decimals - token1Decimals)
 }
 
 // WAD-scaled IL fraction: ε = sqrtCurrent/sqrtEntry - 1 (funded LP formula)

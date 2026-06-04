@@ -1,0 +1,64 @@
+/* Prism Design System — CSS variables only. No component styles here. */
+
+:root {
+  /* Backgrounds */
+  --bg-base:    #080808;
+  --bg-surface: #0F0F0F;
+  --bg-raised:  #161616;
+  --bg-overlay: #1C1C1C;
+
+  /* Borders */
+  --border-subtle:  #1A1A1A;
+  --border-default: #242424;
+  --border-strong:  #333333;
+
+  /* Text */
+  --text-primary:   #F2F2F2;
+  --text-secondary: #888888;
+  --text-tertiary:  #444444;
+
+  /* LP-Y — amber */
+  --lpy-base:   #F0B429;
+  --lpy-muted:  rgba(240, 180, 41, 0.12);
+  --lpy-border: rgba(240, 180, 41, 0.25);
+
+  /* LP-D — violet */
+  --lpd-base:   #7C3AED;
+  --lpd-muted:  rgba(124, 58, 237, 0.12);
+  --lpd-border: rgba(124, 58, 237, 0.25);
+
+  /* Vault — blue */
+  --vault-base:   #2775CA;
+  --vault-muted:  rgba(39, 117, 202, 0.12);
+  --vault-border: rgba(39, 117, 202, 0.25);
+
+  /* Semantic */
+  --positive:       #16A34A;
+  --positive-muted: rgba(22, 163, 74, 0.12);
+  --negative:       #DC2626;
+  --negative-muted: rgba(220, 38, 38, 0.12);
+  --warning:        #D97706;
+  --warning-muted:  rgba(217, 119, 6, 0.12);
+
+  /* Typography scale */
+  --text-display-size:   28px;
+  --text-heading-size:   18px;
+  --text-body-size:      14px;
+  --text-small-size:     12px;
+  --text-label-size:     10px;
+  --text-mono-lg-size:   22px;
+  --text-mono-md-size:   15px;
+  --text-mono-sm-size:   12px;
+
+  /* Spacing */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+}

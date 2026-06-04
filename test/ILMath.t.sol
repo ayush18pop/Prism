@@ -75,17 +75,20 @@ contract ILMathTest is Test {
         assertGe(maxIL, absILAtLower, "maxIL must be >= |IL at lower boundary|");
     }
 
-    function test_computeMaxIL_boundsUpperBoundary() public pure {
+    function test_computeMaxIL_upperBoundaryGainNotCounted() public pure {
+        // Entry at tick 0, upper boundary is a gain — maxIL must NOT be inflated by it.
+        // maxIL should equal |IL at lower boundary| (the loss side).
         uint160 sqrtEntry = TickMath.getSqrtPriceAtTick(0);
         int24 tickLower = -2877;
         int24 tickUpper = 2231;
 
         uint256 maxIL = ILMath._computeMaxIL(sqrtEntry, tickLower, tickUpper, 0);
 
+        int256 ilAtLower = ILMath._computeIL(sqrtEntry, TickMath.getSqrtPriceAtTick(tickLower), 0);
         int256 ilAtUpper = ILMath._computeIL(sqrtEntry, TickMath.getSqrtPriceAtTick(tickUpper), 0);
-        uint256 absILAtUpper = ilAtUpper < 0 ? uint256(-ilAtUpper) : uint256(ilAtUpper);
-
-        assertGe(maxIL, absILAtUpper, "maxIL must be >= |IL at upper boundary|");
+        assertLt(ilAtLower, 0, "lower boundary is a loss");
+        assertGt(ilAtUpper, 0, "upper boundary is a gain, not a risk");
+        assertEq(maxIL, uint256(-ilAtLower), "maxIL = |lower boundary loss|, gain at upper not counted");
     }
 
     function test_computeMaxIL_wideRangeGtNarrowRange() public pure {
@@ -98,17 +101,17 @@ contract ILMathTest is Test {
         assertGt(maxILWide, maxILNarrow, "wider range = higher worst-case IL");
     }
 
-    function test_computeMaxIL_entryAtLower_lowerBoundIsZero() public pure {
-        // Entry price at tickLower: IL at lower boundary = 0
+    function test_computeMaxIL_entryAtLower_noDownsideRisk() public pure {
+        // Entry at tickLower: price can only move up from here → all movement is gain.
+        // LP-D absorbs losses only, so maxIL = 0 (no loss exposure).
         int24 tickLower = -2877;
         int24 tickUpper = 2231;
         uint160 sqrtEntry = TickMath.getSqrtPriceAtTick(tickLower);
 
         uint256 maxIL = ILMath._computeMaxIL(sqrtEntry, tickLower, tickUpper, 0);
 
-        // IL at lower boundary should be 0 (price unchanged), all risk is at upper boundary
         int256 ilAtLower = ILMath._computeIL(sqrtEntry, TickMath.getSqrtPriceAtTick(tickLower), 0);
         assertEq(ilAtLower, 0, "IL at lower boundary = 0 when entry is at lower tick");
-        assertGt(maxIL, 0, "maxIL should be positive (upper boundary risk exists)");
+        assertEq(maxIL, 0, "no loss risk when entry is at lower tick, all upside");
     }
 }

@@ -269,6 +269,9 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         IPoolManager.ModifyLiquidityParams calldata params,
         bytes calldata hookData
     ) external onlyPoolManager returns (bytes4) {
+        // liquidityDelta=0 is a fee-collection-only call — no IL to compute, no state to update.
+        if (params.liquidityDelta == 0) return IHooks.beforeRemoveLiquidity.selector;
+
         bytes32 poolId = PoolId.unwrap(key.toId());
 
         bytes32 posId = hookData.length >= 32
@@ -306,6 +309,9 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         BalanceDelta,
         bytes calldata hookData
     ) external onlyPoolManager returns (bytes4, BalanceDelta) {
+        // liquidityDelta=0 is a fee-collection-only call — don't settle or clear the position.
+        if (params.liquidityDelta == 0) return (IHooks.afterRemoveLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
+
         bytes32 poolId = PoolId.unwrap(key.toId());
 
         bytes32 posId = hookData.length >= 32

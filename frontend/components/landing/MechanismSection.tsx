@@ -1,79 +1,165 @@
-export function MechanismSection() {
-  return (
-    <section id="mechanism" className="bg-black px-6 py-32">
-      <div className="mx-auto max-w-5xl">
-        <p className="text-xs text-white/30 uppercase tracking-[0.2em] mb-4 text-center">How it works</p>
-        <p className="font-display text-4xl md:text-5xl text-white text-center mb-20 leading-tight">
-          One deposit.<br />
-          <span className="text-white/30">Two tokens. Zero IL.</span>
-        </p>
+'use client'
 
-        {/* Three columns */}
-        <div className="grid md:grid-cols-3 gap-px bg-white/5 rounded-2xl overflow-hidden">
-          <Step
-            number="01"
-            accent="text-white/40"
-            headline="LP deposits"
-            body="An LP provides liquidity to a Prism pool exactly as they would on Uniswap. One transaction. Nothing different."
-            tag="afterAddLiquidity"
-          />
-          <Step
-            number="02"
-            accent="text-violet-400"
-            headline="Hook splits the position"
-            body="The hook mints two tokens. LP-Y earns a protocol-set share of swap fees with zero IL. LP-D earns its share too — plus USDC collateral that pays out only if the LP exits with losses. Both tokens earn."
-            tag="LP-Y · LP-D"
-          />
-          <Step
-            number="03"
-            accent="text-emerald-400"
-            headline="LP exits whole"
-            body="When the LP removes liquidity, any IL is drawn from the LP-D vault. The LP receives their full value. The project keeps their liquidity loyal."
-            tag="IL = $0"
-          />
+import { useInView } from '@/hooks/useInView'
+
+export function MechanismSection() {
+  const { ref, inView } = useInView()
+
+  return (
+    <section
+      id="mechanism"
+      ref={ref as React.RefObject<HTMLElement>}
+      style={{
+        background: 'var(--bg-base)',
+        padding: '120px 40px',
+        opacity: inView ? 1 : 0,
+        transform: inView ? 'none' : 'translateY(16px)',
+        transition: 'opacity 600ms ease, transform 600ms ease',
+      }}
+    >
+      <div style={{ maxWidth: 960, margin: '0 auto' }}>
+
+        {/* The hook callback as the visual anchor */}
+        <div style={{ marginBottom: 64 }}>
+          <p style={{
+            fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)',
+            fontSize: 11, letterSpacing: '0.12em',
+            color: 'var(--text-tertiary)', marginBottom: 20,
+          }}>
+            function afterAddLiquidity(...)
+          </p>
+          <h2 style={{
+            fontSize: 'clamp(28px, 4vw, 48px)', fontWeight: 500,
+            lineHeight: 1.15, letterSpacing: '-0.03em',
+            color: 'var(--text-primary)', maxWidth: 600,
+          }}>
+            The LP deposits.<br />
+            <span style={{ color: 'var(--text-tertiary)' }}>
+              The hook handles everything else.
+            </span>
+          </h2>
         </div>
 
-        {/* Standing bid callout */}
-        <div className="mt-16 border border-amber-500/10 bg-amber-500/[0.03] rounded-2xl px-8 py-8">
-          <div className="flex flex-col md:flex-row md:items-center gap-6">
-            <div className="flex-1">
-              <p className="text-xs text-amber-400/60 uppercase tracking-[0.2em] mb-2">Standing Bid</p>
-              <p className="font-display text-2xl text-white leading-snug">
-                The project pre-deposits USDC once.<br />
-                <span className="text-white/50">Every LP deposit auto-fills in the same block.</span>
+        {/* Transaction view — not steps */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2,
+          marginBottom: 48,
+        }}>
+          {/* Before */}
+          <div style={{
+            padding: '28px 32px',
+            background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
+          }}>
+            <p style={{
+              fontSize: 10, fontWeight: 500, letterSpacing: '0.15em',
+              textTransform: 'uppercase', color: 'var(--text-tertiary)',
+              marginBottom: 20,
+            }}>
+              What the LP sends
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[
+                'poolKey (USDC/PRISM, fee, tickSpacing, hook)',
+                'tickLower, tickUpper',
+                'liquidityDelta',
+              ].map(line => (
+                <p key={line} style={{
+                  fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)',
+                  fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6,
+                }}>
+                  {line}
+                </p>
+              ))}
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 16, lineHeight: 1.6 }}>
+              Identical to any standard v4 deposit. No extra steps.
+            </p>
+          </div>
+
+          {/* After */}
+          <div style={{
+            padding: '28px 32px',
+            background: 'var(--bg-raised)', border: '1px solid var(--border-default)',
+          }}>
+            <p style={{
+              fontSize: 10, fontWeight: 500, letterSpacing: '0.15em',
+              textTransform: 'uppercase', color: 'var(--text-tertiary)',
+              marginBottom: 20,
+            }}>
+              What ends up in the LP wallet
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[
+                { label: 'LP-Y token', color: 'var(--lpy-base)', note: 'fee yield, zero delta' },
+                { label: 'LP-D token*', color: 'var(--lpd-base)', note: 'if no standing bid matched' },
+              ].map(({ label, color, note }) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <p style={{
+                    fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)',
+                    fontSize: 12, color, lineHeight: 1.6, flexShrink: 0,
+                  }}>
+                    {label}
+                  </p>
+                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{note}</p>
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 16, lineHeight: 1.6 }}>
+              * If a standing bid matched, LP-D was already sold in the same transaction.
+              LP-Y only. IL: $0.
+            </p>
+          </div>
+        </div>
+
+        {/* Standing bid — described as a market mechanism, not a feature */}
+        <div style={{
+          padding: '32px 36px',
+          border: '1px solid var(--border-default)',
+          borderLeft: '3px solid var(--vault-base)',
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40 }}>
+            <div>
+              <p style={{
+                fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)',
+                fontSize: 11, color: 'var(--vault-base)', letterSpacing: '0.1em',
+                marginBottom: 12,
+              }}>
+                standingBids[poolId]
+              </p>
+              <p style={{
+                fontSize: 18, fontWeight: 500, color: 'var(--text-primary)',
+                letterSpacing: '-0.02em', lineHeight: 1.3, marginBottom: 12,
+              }}>
+                The protocol pre-funds once.<br />
+                Every deposit fills atomically.
+              </p>
+              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
+                No per-deposit transactions. No keeper bots. No manual settlement.
+                The bid fills or doesn&apos;t, at deposit time, in the same block.
               </p>
             </div>
-            <div className="md:w-72 text-sm text-white/40 leading-relaxed space-y-3">
-              <p>
-                The project gets sticky liquidity without printing tokens or running incentive programs.
-                LPs stay because the IL is covered, not because the yield is temporarily inflated.
-              </p>
-              <p>
-                LP-D buyers earn their fee share on liquidity they didn&apos;t have to provide —
-                and their collateral returns if price barely moves. It is insurance underwriting:
-                collect the premium, pay out only when the event occurs.
-              </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {[
+                { field: 'pricePerUnit', desc: 'IL coverage fraction (0.0 to 1.0). Must cover maxIL to fill.' },
+                { field: 'feeShareBpsLPD', desc: 'Ongoing fee share earned by LP-D holder per swap.' },
+                { field: 'maxCollateral', desc: 'Total USDC pre-deposited. Used proportionally across fills.' },
+              ].map(({ field, desc }) => (
+                <div key={field}>
+                  <p style={{
+                    fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)',
+                    fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4,
+                  }}>
+                    {field}
+                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
+                    {desc}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </div>
     </section>
-  )
-}
-
-function Step({ number, accent, headline, body, tag }: {
-  number: string
-  accent: string
-  headline: string
-  body: string
-  tag: string
-}) {
-  return (
-    <div className="bg-black px-8 py-10">
-      <p className={`font-display text-5xl mb-6 ${accent}`}>{number}</p>
-      <p className="text-white font-medium mb-3">{headline}</p>
-      <p className="text-sm text-white/40 leading-relaxed mb-6">{body}</p>
-      <code className="text-xs text-white/20 font-mono">{tag}</code>
-    </div>
   )
 }

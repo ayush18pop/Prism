@@ -45,8 +45,9 @@ library ILMath {
         int256 ilAtLower = _computeIL(sqrtPriceEntry, sqrtAtLower, liquidity);
         int256 ilAtUpper = _computeIL(sqrtPriceEntry, sqrtAtUpper, liquidity);
 
-        uint256 absLower = ilAtLower < 0 ? uint256(-ilAtLower) : uint256(ilAtLower);
-        uint256 absUpper = ilAtUpper < 0 ? uint256(-ilAtUpper) : uint256(ilAtUpper);
+        // Only losses count — IL at upper tick is a gain for the LP, not a risk for LP-D.
+        uint256 absLower = ilAtLower < 0 ? uint256(-ilAtLower) : 0;
+        uint256 absUpper = ilAtUpper < 0 ? uint256(-ilAtUpper) : 0;
 
         return absLower > absUpper ? absLower : absUpper;
     }

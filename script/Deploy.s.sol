@@ -41,7 +41,6 @@ contract Deploy is Script {
         address deployer = vm.envAddress("DEPLOYER_ADDRESS");
         address pmAddr   = vm.envAddress("POOL_MANAGER_ADDRESS");
         address weth     = vm.envAddress("WETH_ADDRESS");
-        address rscAddr  = vm.envOr("RSC_ADDRESS", address(0)); // may be 0 pre-RSC deploy
 
         // USDC_ADDRESS is optional: if unset, MockUSDC is deployed and its address is printed.
         // After first run: set USDC_ADDRESS=<printed address> in .env for RSC and frontend.
@@ -97,18 +96,13 @@ contract Deploy is Script {
         console.log("Tokens wired to hook");
 
         // ── Step 5: Deploy PrismCallback (RSC callback receiver) ──────────────
-        // If RSC is not yet deployed, pass address(0) for now. Call setCallbackContract
-        // manually after RSC is deployed.
-        PrismCallback callback = new PrismCallback(address(hook), rscAddr);
+        // authorizedRSC is set later via callback.setAuthorizedRSC(rscAddr) once RSC is deployed.
+        // hook.setCallbackContract(callback) must also be called manually after RSC deploy.
+        PrismCallback callback = new PrismCallback(address(hook), deployer);
         console.log("PrismCallback:", address(callback));
-
-        // ── Step 6: Wire hook → callback (if RSC address is known) ────────────
-        if (rscAddr != address(0)) {
-            hook.setCallbackContract(address(callback));
-            console.log("Hook wired to callback");
-        } else {
-            console.log("NOTICE: call hook.setCallbackContract(callbackAddr) after RSC deploy");
-        }
+        console.log("NOTICE: after RSC deploy, run:");
+        console.log("  cast send <callback> 'setAuthorizedRSC(address)' <rsc_addr> ...");
+        console.log("  cast send <hook> 'setCallbackContract(address)' <callback_addr> ...");
 
         // ── Step 7: Deploy PrismRouter ────────────────────────────────────────
         PrismRouter router = new PrismRouter(IPoolManager(pmAddr));

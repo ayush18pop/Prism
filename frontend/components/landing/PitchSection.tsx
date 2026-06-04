@@ -1,52 +1,74 @@
+'use client'
+
+import { useInView } from '@/hooks/useInView'
+
 export function PitchSection() {
+  const { ref, inView } = useInView()
+
   return (
-    <section id="pitch" className="bg-zinc-950 px-6 py-32">
-      <div className="mx-auto max-w-5xl">
-        {/* Label */}
-        <p className="text-xs text-white/30 uppercase tracking-[0.2em] mb-16 text-center">The problem</p>
+    <section
+      id="pitch"
+      ref={ref as React.RefObject<HTMLElement>}
+      style={{
+        background: 'var(--bg-surface)',
+        padding: '120px 40px',
+        opacity: inView ? 1 : 0,
+        transform: inView ? 'none' : 'translateY(16px)',
+        transition: 'opacity 600ms ease, transform 600ms ease',
+      }}
+    >
+      <div style={{ maxWidth: 760, margin: '0 auto' }}>
 
-        {/* Two columns */}
-        <div className="grid md:grid-cols-[1fr_1px_1fr] gap-12 md:gap-0">
-          {/* LP problem */}
-          <div className="md:pr-16">
-            <p className="font-display text-2xl text-white mb-6 leading-snug">
-              The LP earns fees.<br />
-              <span className="text-white/40">But loses to price.</span>
-            </p>
-            <p className="text-sm text-white/50 leading-relaxed">
-              Every Uniswap LP is taking a bet they didn&apos;t sign up for. The moment price moves,
-              they lose value relative to just holding — not because they did anything wrong,
-              but because AMMs require it. Fees earn. IL erodes. There is no way to separate
-              the two without leaving the pool entirely.
-            </p>
-          </div>
+        {/* Lead — the actual structural problem, not a benefits pitch */}
+        <p style={{
+          fontSize: 11, fontWeight: 500, letterSpacing: '0.2em',
+          textTransform: 'uppercase', color: 'var(--text-tertiary)',
+          marginBottom: 40,
+        }}>
+          The structural problem
+        </p>
 
-          {/* Divider */}
-          <div className="hidden md:block bg-white/5" />
+        <h2 style={{
+          fontSize: 'clamp(28px, 4vw, 48px)', fontWeight: 500,
+          lineHeight: 1.15, letterSpacing: '-0.03em',
+          color: 'var(--text-primary)', marginBottom: 32,
+        }}>
+          AMMs price liquidity correctly.<br />
+          <span style={{ color: 'var(--text-tertiary)' }}>They just don&apos;t pay for it correctly.</span>
+        </h2>
 
-          {/* Project problem */}
-          <div className="md:pl-16">
-            <p className="font-display text-2xl text-white mb-6 leading-snug">
-              The project needs liquidity.<br />
-              <span className="text-white/40">But it keeps leaving.</span>
-            </p>
-            <p className="text-sm text-white/50 leading-relaxed">
-              Liquidity mining works — until emissions stop. Then LPs leave. The liquidity
-              was rented, not loyal. Every project is on the same treadmill: print tokens,
-              attract LPs, watch them exit when the yield dries up. IL coverage is the only
-              thing that makes liquidity stay without paying for it in perpetuity.
-            </p>
-          </div>
-        </div>
-
-        {/* Resolution */}
-        <div className="mt-24 text-center">
-          <p className="font-display text-4xl md:text-5xl text-white leading-tight">
-            One side wants protection.<br />
-            The other wants yield on liquidity they don&apos;t have to provide.<br />
-            <span className="italic text-violet-300">Prism makes both possible. One hook.</span>
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: 20,
+          borderLeft: '2px solid var(--border-subtle)', paddingLeft: 28,
+          marginBottom: 56,
+        }}>
+          <p style={{ fontSize: 15, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
+            An LP signs up for fee income. What they actually get is fee income
+            plus a short position on volatility they never agreed to price.
+            Not disclosed. Just a structural consequence of providing liquidity on
+            a constant product curve. The more price moves, the more the AMM
+            routes against them.
+          </p>
+          <p style={{ fontSize: 15, lineHeight: 1.7, color: 'var(--text-tertiary)' }}>
+            Protocols know this math. The standard fix is token emissions:
+            pay LPs enough on top to compensate for what the AMM takes.
+            It works until emissions stop.
+            Then LPs calculate their real P&L and leave.
+            Every major DeFi liquidity crisis follows the same script.
           </p>
         </div>
+
+        {/* The actual insight — one line, no italic crescendo */}
+        <p style={{
+          fontSize: 'clamp(18px, 2.5vw, 28px)', fontWeight: 500,
+          lineHeight: 1.3, letterSpacing: '-0.02em',
+          color: 'var(--text-primary)',
+          paddingTop: 32, borderTop: '1px solid var(--border-default)',
+        }}>
+          Liquidity provision and price exposure were never supposed
+          to be the same trade.
+        </p>
+
       </div>
     </section>
   )

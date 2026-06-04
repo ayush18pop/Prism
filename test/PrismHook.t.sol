@@ -832,11 +832,13 @@ contract PrismHookTest is Test {
     // Tick range [-9960, 9960] gives maxIL ≈ 65% so usdcForPos ≈ 65% of maxCollateral.
     // After one fill (65% used), a second deposit would need 130% → exceeds 100% → skipped.
     function test_afterAddLiquidity_bidCapacityExhausted_silentSkip() public {
-        int24 wide_lower = -9960;
-        int24 wide_upper =  9960;
+        // Range where maxIL > 0.5e18 (price at lower tick is <25% of entry) so
+        // two fills of equal size exhaust 100 USDC capacity.
+        int24 wide_lower = -14040;
+        int24 wide_upper =  14040;
 
-        // pricePerUnit must be >= maxIL (≈ 0.65e18); 0.9e18 passes the adequacy check.
-        uint256 maxCollateral = 100e6; // 100 USDC — enough for exactly 1 fill at the wide range
+        // pricePerUnit must be >= maxIL (~0.505e18); 0.9e18 passes the adequacy check.
+        uint256 maxCollateral = 100e6; // 100 USDC — enough for exactly 1 fill at this range
         vm.prank(bidder);
         hook.setStandingBid(poolId, 0.9e18, 3000, maxCollateral);
 

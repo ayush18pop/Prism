@@ -31,13 +31,20 @@ contract PrismCallbackTest is Test {
         attacker = makeAddr("attacker");
 
         mockHook = new MockHookForCallback();
-        cb       = new PrismCallback(address(mockHook), rsc);
+        // constructor takes (hook, owner) — RSC is set post-deploy via setAuthorizedRSC
+        cb = new PrismCallback(address(mockHook), address(this));
+        cb.setAuthorizedRSC(rsc);
     }
 
-    // ── immutable state ────────────────────────────────────────────────────────
+    // ── authorizedRSC ──────────────────────────────────────────────────────────
 
-    function test_authorizedRSC_matchesConstructorArg() public {
+    function test_authorizedRSC_matchesSetCall() public {
         assertEq(cb.authorizedRSC(), rsc);
+    }
+
+    function test_setAuthorizedRSC_cannotSetTwice() public {
+        vm.expectRevert(PrismCallback.AlreadySet.selector);
+        cb.setAuthorizedRSC(makeAddr("other"));
     }
 
     function test_hook_matchesConstructorArg() public {

@@ -4,7 +4,7 @@ import { useReadContract, useWriteContract, usePublicClient } from 'wagmi'
 import { parseAbiItem } from 'viem'
 import { useQuery } from '@tanstack/react-query'
 import { ADDRESSES } from '@/lib/addresses'
-import { PRISM_HOOK_ABI } from '@/lib/abis'
+import { PRISM_HOOK_ABI, ERC1155_ABI } from '@/lib/abis'
 
 export function usePosition(posId: `0x${string}` | undefined) {
   return useReadContract({
@@ -101,6 +101,40 @@ export function useLPDFeesClaimable(posId: `0x${string}` | undefined) {
     args: posId ? [posId] : undefined,
     chainId: 1301,
     query: { enabled: !!posId && !!ADDRESSES.PrismHook },
+  })
+}
+
+export interface MyPosition {
+  posId: `0x${string}`
+  initialCollateral: bigint
+}
+
+export function useMyPositions(
+  account: `0x${string}` | undefined,
+  allLogs: ReturnType<typeof usePositionLogs>['data'],
+) {
+  const client = usePublicClient({ chainId: 1301 })
+  return useQuery({
+    queryKey: ['myPositions', account, ADDRESSES.LPYToken, ADDRESSES.LPDToken, allLogs?.length],
+    queryFn: async (): Promise<MyPosition[]> => {
+      if (!client || !account || !allLogs || !ADDRESSES.LPYToken || !ADDRESSES.LPDToken) return []
+      const results = await Promise.all(
+        allLogs.map(async log => {
+          const posId = log.args.posId as `0x${string}`
+          const tokenId = BigInt(posId)
+          const [lpY, lpD] = await Promise.all([
+            client.readContract({ address: ADDRESSES.LPYToken!, abi: ERC1155_ABI, functionName: 'balanceOf', args: [account, tokenId] }),
+            client.readContract({ address: ADDRESSES.LPDToken!, abi: ERC1155_ABI, functionName: 'balanceOf', args: [account, tokenId] }),
+          ])
+          return { posId, lpY, lpD, initialCollateral: (log.args.collateral as bigint) ?? 0n }
+        })
+      )
+      return results
+        .filter(r => r.lpY > 0n || r.lpD > 0n)
+        .map(r => ({ posId: r.posId, initialCollateral: r.initialCollateral }))
+    },
+    enabled: !!client && !!account && !!allLogs && allLogs.length > 0,
+    refetchInterval: 30_000,
   })
 }
 

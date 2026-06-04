@@ -75,6 +75,64 @@ export const ERC1155_ABI = [
   { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'id', type: 'uint256' }], outputs: [{ name: '', type: 'uint256' }] },
   { name: 'setApprovalForAll', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'operator', type: 'address' }, { name: 'approved', type: 'bool' }], outputs: [] },
   { name: 'isApprovedForAll', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'operator', type: 'address' }], outputs: [{ name: '', type: 'bool' }] },
+  { name: 'safeTransferFrom', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'id', type: 'uint256' }, { name: 'value', type: 'uint256' }, { name: 'data', type: 'bytes' }], outputs: [] },
+] as const
+
+export const PRISM_ROUTER_ABI = [
+  { name: 'addLiquidity', type: 'function', stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'key', type: 'tuple', components: [
+        { name: 'currency0', type: 'address' }, { name: 'currency1', type: 'address' },
+        { name: 'fee', type: 'uint24' }, { name: 'tickSpacing', type: 'int24' }, { name: 'hooks', type: 'address' },
+      ]},
+      { name: 'params', type: 'tuple', components: [
+        { name: 'tickLower', type: 'int24' }, { name: 'tickUpper', type: 'int24' },
+        { name: 'liquidityDelta', type: 'int256' }, { name: 'salt', type: 'bytes32' },
+      ]},
+    ], outputs: [] },
+  { name: 'removeLiquidity', type: 'function', stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'key', type: 'tuple', components: [
+        { name: 'currency0', type: 'address' }, { name: 'currency1', type: 'address' },
+        { name: 'fee', type: 'uint24' }, { name: 'tickSpacing', type: 'int24' }, { name: 'hooks', type: 'address' },
+      ]},
+      { name: 'params', type: 'tuple', components: [
+        { name: 'tickLower', type: 'int24' }, { name: 'tickUpper', type: 'int24' },
+        { name: 'liquidityDelta', type: 'int256' }, { name: 'salt', type: 'bytes32' },
+      ]},
+      { name: 'posId', type: 'bytes32' },
+    ], outputs: [] },
+  { name: 'swap', type: 'function', stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'key', type: 'tuple', components: [
+        { name: 'currency0', type: 'address' }, { name: 'currency1', type: 'address' },
+        { name: 'fee', type: 'uint24' }, { name: 'tickSpacing', type: 'int24' }, { name: 'hooks', type: 'address' },
+      ]},
+      { name: 'zeroForOne', type: 'bool' },
+      { name: 'amountSpecified', type: 'int256' },
+      { name: 'sqrtPriceLimitX96', type: 'uint160' },
+    ], outputs: [] },
+  { name: 'claimFees', type: 'function', stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'key', type: 'tuple', components: [
+        { name: 'currency0', type: 'address' }, { name: 'currency1', type: 'address' },
+        { name: 'fee', type: 'uint24' }, { name: 'tickSpacing', type: 'int24' }, { name: 'hooks', type: 'address' },
+      ]},
+      { name: 'posId', type: 'bytes32' },
+      { name: 'hook', type: 'address' },
+    ], outputs: [] },
+] as const
+
+// PoolManager StateLibrary — extsload-based getSlot0
+export const POOL_MANAGER_ABI = [
+  { name: 'getSlot0', type: 'function', stateMutability: 'view',
+    inputs: [{ name: 'id', type: 'bytes32' }],
+    outputs: [
+      { name: 'sqrtPriceX96', type: 'uint160' },
+      { name: 'tick',         type: 'int24'   },
+      { name: 'protocolFee', type: 'uint24'   },
+      { name: 'lpFee',        type: 'uint24'   },
+    ] },
 ] as const
 
 export const ERC20_ABI = [

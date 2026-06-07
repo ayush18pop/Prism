@@ -165,7 +165,6 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
 
     /// @notice One-time: set the RSC callback contract (step 5 of deploy order).
     function setCallbackContract(address _callback) external onlyOwner {
-        if (callbackContract != address(0)) revert CallbackAlreadySet();
         callbackContract = _callback;
     }
 

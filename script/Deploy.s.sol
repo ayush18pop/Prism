@@ -96,15 +96,24 @@ contract Deploy is Script {
         console.log("Tokens wired to hook");
 
         // ── Step 5: Deploy PrismCallback (RSC callback receiver) ──────────────
-        // authorizedRSC is set later via callback.setAuthorizedRSC(rscAddr) once RSC is deployed.
-        // hook.setCallbackContract(callback) must also be called manually after RSC deploy.
         PrismCallback callback = new PrismCallback(address(hook), deployer);
         console.log("PrismCallback:", address(callback));
-        console.log("NOTICE: after RSC deploy, run:");
-        console.log("  cast send <callback> 'setAuthorizedRSC(address)' <rsc_addr> ...");
-        console.log("  cast send <hook> 'setCallbackContract(address)' <callback_addr> ...");
 
-        // ── Step 7: Deploy PrismRouter ────────────────────────────────────────
+        // Wire callback into hook immediately
+        hook.setCallbackContract(address(callback));
+        console.log("hook.setCallbackContract done");
+
+        // If RSC_ADDRESS is already known, authorize it immediately
+        address rscAddr = vm.envOr("RSC_ADDRESS", address(0));
+        if (rscAddr != address(0)) {
+            callback.setAuthorizedRSC(rscAddr);
+            console.log("callback.setAuthorizedRSC done:", rscAddr);
+        } else {
+            console.log("RSC_ADDRESS not set - run after RSC deploy:");
+            console.log("  cast send <callback> 'setAuthorizedRSC(address)' <rsc_addr> ...");
+        }
+
+        // ── Step 6: Deploy PrismRouter ────────────────────────────────────────
         PrismRouter router = new PrismRouter(IPoolManager(pmAddr));
         console.log("PrismRouter:", address(router));
 

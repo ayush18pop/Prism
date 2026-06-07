@@ -177,8 +177,9 @@ export function DepositForm() {
 
   const needsUsdcApprove  = usdcNeeded  > 0n
   const needsPrismApprove = prismNeeded > 0n
+  const poolNotInitialized = sqrtPriceX96 === 0n && activeTier.deployed
   const canSubmit = !tickError && !!computed && computed.liquidityDelta > 0n
-    && !prismInsufficient && !usdcInsufficient && step === 'idle' && activeTier.deployed
+    && !prismInsufficient && !usdcInsufficient && step === 'idle' && activeTier.deployed && !poolNotInitialized
   const isLoading = step !== 'idle' && step !== 'done'
 
   const stepLabel: Record<typeof step, string> = {
@@ -488,6 +489,19 @@ export function DepositForm() {
             </div>
           ))}
           <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 4 }}>{stepLabel[step]}</span>
+        </div>
+      )}
+
+      {/* Pool not initialized warning */}
+      {poolNotInitialized && (
+        <div style={{ padding: '10px 14px', background: 'var(--warning-muted)', border: '1px solid rgba(217,119,6,0.3)' }}>
+          <p style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 500, marginBottom: 2 }}>Pool not initialized</p>
+          <p style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)', lineHeight: 1.5 }}>
+            Run in terminal: <br />
+            <span style={{ color: 'var(--text-primary)' }}>
+              cast send $POOL_MANAGER &quot;initialize(...)&quot; ... --rpc-url unichain_sepolia
+            </span>
+          </p>
         </div>
       )}
 

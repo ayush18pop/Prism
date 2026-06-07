@@ -1,19 +1,19 @@
-// Deployed on Unichain Sepolia — block 53622081
-// New pool (fee=500, tickSpacing=10) initialized at block ~53636000
-// Pool initialized at sqrtPriceX96 = Q96 (tick 0) — both USDC and PRISM are 6 decimals, so tick 0 = 1 PRISM : 1 USDC
-// PrismRSC on Lasna (chain 5318007) — 0x7F6e422f3184CBa32b655147C7233CdD007552A2
+// Deployed on Unichain Sepolia — block 53895363
+// Pool: USDC/PRISM, fee=500 (0.05%), tickSpacing=10
+// Pool initialized at sqrtPriceX96 = Q96 (tick 0) — 1 PRISM = 1 USDC (both 6 decimals)
 const deployments = {
-  PrismHook:     '0x31AbbBBEAF701E3da2B39c7211Bea52376BF8700',
-  LPYToken:      '0x1239f52D329E877D0dA6f0551Cb16F0B231C7E74',
-  LPDToken:      '0xaF6Da70D5AEE595CfEA77E83dD77974BE348D942',
-  PrismCallback: '0x8bb28b3c2274d6d058E0cd7DEAC30774AEcb26BE',
-  PrismRouter:   '0x0aA07c99f2aac6f00e690f05353cBB05f0E85110',
+  PrismHook:     '0xB83Ce21DBb0C9105C809510858290eD0da82C700',
+  LPYToken:      '0xD2Fd92e7Ef69Dfd0A605d7AEfbb16F9e71Fd7D05',
+  LPDToken:      '0xD77841A368ACD5Fd01610D0c8f25081BBf8ff550',
+  PrismCallback: '0xAdBCc05DC97c76626e7A2731416745A1CdF98990',
+  PrismRouter:   '0x749456188Be970c02dC3C512ecBe1ea53C12262D',
   USDC:          '0x31d0220469e10c4E71834a79b1f276d740d3768F',
   WETH:          '0x4200000000000000000000000000000000000006',
   PRISM:         '0xCf864db2623735b28BEC4863490e19b13C7B1a5F',
   PoolManager:   '0x00B036B58a818B1BC34d502D3fE730Db729e62AC',
-  poolId:        '0x285d65ae5d9e811fb0cf2324907800addb23d9ec513a93707112e6709ae75b4a',
-  deployBlock:   53678772,
+  PrismRSC:      '0x430e2F332fFe1BC5eFa3C54360fE9aC704EEaff7',
+  poolId:        '0xbde6c9ece59c121bd0a4edc4a112d5b7d3416f81db4943dfe1ebc0dddb858208',
+  deployBlock:   53895363,
 }
 
 function addr(s: string): `0x${string}` | undefined {
@@ -30,12 +30,12 @@ export const ADDRESSES = {
   WETH:          addr(deployments.WETH),
   PRISM:         addr(deployments.PRISM),
   PoolManager:   addr(deployments.PoolManager),
+  PrismRSC:      deployments.PrismRSC ? addr(deployments.PrismRSC) : undefined,
   deployBlock:   BigInt(deployments.deployBlock),
   poolId:        deployments.poolId as `0x${string}`,
 }
 
-// USDC (0x31d0...) < PRISM (0xEAd1...) — USDC is currency0
-// New pool: fee=500 (0.05%), tickSpacing=10, initialized at 1 PRISM = 1 USDC
+// USDC (0x31d0...) < PRISM (0xCf86...) — USDC is currency0
 export const DEMO_POOL_KEY = {
   currency0:   deployments.USDC      as `0x${string}`,
   currency1:   deployments.PRISM     as `0x${string}`,

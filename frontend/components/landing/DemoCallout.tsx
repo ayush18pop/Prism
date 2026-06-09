@@ -18,7 +18,7 @@ export function DemoCallout() {
       </div>
 
       <div className="relative mx-auto max-w-4xl text-center">
-        <p className="text-xs text-white/30 uppercase tracking-[0.2em] mb-8">Demo scenario</p>
+        <p className="text-xs text-white/30 uppercase tracking-[0.2em] mb-8">What a real drawdown looks like</p>
 
         {/* The outcome — what the LP paid */}
         <p className="font-display text-[10rem] md:text-[14rem] text-white leading-none tracking-tight">
@@ -26,17 +26,18 @@ export function DemoCallout() {
         </p>
 
         <p className="font-display text-2xl md:text-3xl text-white/50 mt-4 mb-6">
-          IL deducted from the LP.
+          impermanent loss.
         </p>
         <p className="font-display text-2xl md:text-3xl text-white">
-          Price dropped 25%. IL was $412. The vault covered it.
+          ETH fell 25%. The loss was $412. The LP-D vault absorbed it.
         </p>
 
         <p className="mt-8 text-sm text-white/30 max-w-lg mx-auto leading-relaxed">
-          LP deposits $10,000. ETH falls from $2,000 to $1,500, a 25% drop.
-          At exit, the impermanent loss is $412. The hook draws $412
-          from the LP-D collateral vault. The LP withdraws $10,000 plus all earned
-          fees. Nothing deducted from principal.
+          An LP deposits $10,000 at $2,000 ETH. Price falls to $1,500.
+          A standard Uniswap LP exits with $412 less than they put in.
+          The Prism LP? The hook computes $412 in IL at withdrawal,
+          draws it from the LP-D collateral vault, and settles atomically.
+          The LP withdraws $10,000 plus every fee they earned. Principal intact.
         </p>
 
         <Link

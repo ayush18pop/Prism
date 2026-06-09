@@ -4,7 +4,8 @@ import { useWatchContractEvent } from 'wagmi'
 import { parseAbiItem } from 'viem'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { ADDRESSES } from '@/lib/addresses'
-import { SplitVisualizer, TokenPill, SectionLabel, AddressChip } from '@/components/ui/index'
+import { TokenPill, SectionLabel, AddressChip } from '@/components/ui/index'
+import { PrismSplitAnimation } from '@/components/landing/PrismSplitAnimation'
 import { usePoolPrice } from '@/hooks/usePoolPrice'
 import { useStandingBid } from '@/hooks/useStandingBid'
 import { formatTimeAgo } from '@/lib/format'
@@ -83,8 +84,8 @@ export default function PoolPage() {
   })
 
   const stats = [
-    { key: 'price', label: 'POOL PRICE', value: loaded ? priceFormatted : '—', mono: true, large: true },
-    { key: 'tick',  label: 'TICK',       value: loaded ? String(tick) : '—',    mono: true, large: false },
+    { key: 'price', label: 'POOL PRICE', value: loaded ? priceFormatted : '--', mono: true, large: true },
+    { key: 'tick',  label: 'TICK',       value: loaded ? String(tick) : '--',    mono: true, large: false },
     { key: 'pair',  label: 'PAIR',       value: 'USDC / PRISM',                 mono: true, large: false },
     { key: 'fee',   label: 'FEE',        value: '0.05%',                        mono: true, large: false },
   ]
@@ -165,24 +166,18 @@ export default function PoolPage() {
             LP-Y earns fees. LP-D absorbs price risk. Whoever holds LP-D posts USDC collateral.
           </p>
 
-          {/* SplitVisualizer */}
-          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
-            <SplitVisualizer lpyValue={lpyFeePct} lpdValue={lpdFeePct} vaultValue={100} animated={false} size="lg" />
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
-              <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>
-                Fee share
-              </span>
-              {bid.active ? (
-                <span style={{ fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)', fontSize: 11, color: 'var(--text-secondary)' }}>
-                  LP-Y {lpyFeePct.toFixed(0)}% · LP-D {lpdFeePct.toFixed(0)}%
-                  <span style={{ color: 'var(--positive)', marginLeft: 8 }}>● bid active</span>
-                </span>
-              ) : (
-                <span style={{ fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)', fontSize: 11, color: 'var(--text-tertiary)' }}>
-                  set by LP-D buyer via standing bid
-                </span>
-              )}
-            </div>
+          {/* Prism split animation */}
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 20 }}>
+            <PrismSplitAnimation />
+            {bid.active && (
+              <p style={{ fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)', fontSize: 11, color: 'var(--text-tertiary)', marginTop: 12 }}>
+                fee split: LP-Y&nbsp;
+                <span style={{ color: 'var(--lpy-base)' }}>{lpyFeePct.toFixed(0)}%</span>
+                &nbsp;·&nbsp;LP-D&nbsp;
+                <span style={{ color: 'var(--lpd-base)' }}>{lpdFeePct.toFixed(0)}%</span>
+                <span style={{ color: 'var(--positive)', marginLeft: 8 }}>● bid active</span>
+              </p>
+            )}
           </div>
 
           {/* Legend — hover to highlight each token */}

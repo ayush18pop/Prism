@@ -1,5 +1,4 @@
 import { HeroSection } from '@/components/layout/HeroSection'
-import { PitchSection } from '@/components/landing/PitchSection'
 import { MechanismSection } from '@/components/landing/MechanismSection'
 import { TwoSidesSection } from '@/components/landing/TwoSidesSection'
 import { DemoCallout } from '@/components/landing/DemoCallout'
@@ -8,7 +7,6 @@ export default function LandingPage() {
   return (
     <main>
       <HeroSection />
-      <PitchSection />
       <MechanismSection />
       <DemoCallout />
       <TwoSidesSection />

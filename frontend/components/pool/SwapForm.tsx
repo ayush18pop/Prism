@@ -45,6 +45,7 @@ export function SwapForm() {
 
   async function submit() {
     if (!ADDRESSES.PrismRouter || !tokenInAddr) return
+    if (!client) { toast.error('No RPC client, check chain connection'); return }
     setStep('approving')
     try {
       const amountIn = parseUnits(amount, decimalsIn)
@@ -52,16 +53,16 @@ export function SwapForm() {
         address: tokenInAddr, abi: ERC20_ABI, functionName: 'approve',
         args: [ADDRESSES.PrismRouter, amountIn], chainId: 1301,
       })
-      const approveReceipt = await client?.waitForTransactionReceipt({ hash: approveTx })
-      if (approveReceipt?.status === 'reverted') throw new Error('Approve transaction reverted')
+      const approveReceipt = await client.waitForTransactionReceipt({ hash: approveTx })
+      if (approveReceipt.status === 'reverted') throw new Error('Approve transaction reverted')
       setStep('swapping')
       const swapTx = await write({
         address: ADDRESSES.PrismRouter, abi: PRISM_ROUTER_ABI, functionName: 'swap',
         args: [DEMO_POOL_KEY, zeroForOne, -parseUnits(amount, decimalsIn), zeroForOne ? MIN_SQRT_PRICE_LIMIT : MAX_SQRT_PRICE_LIMIT],
         chainId: 1301,
       })
-      const swapReceipt = await client?.waitForTransactionReceipt({ hash: swapTx })
-      if (swapReceipt?.status === 'reverted') throw new Error('Swap transaction reverted')
+      const swapReceipt = await client.waitForTransactionReceipt({ hash: swapTx })
+      if (swapReceipt.status === 'reverted') throw new Error('Swap transaction reverted')
       setLastTx(swapTx)
       setStep('done')
       toast.success(`Swapped ${amount} ${tokenIn} → ${tokenOut}`, {
@@ -176,12 +177,12 @@ export function SwapForm() {
             value={amount}
             onChange={e => { setAmount(e.target.value); setStep('idle') }}
             style={{
-              flex: 1, background: 'none', border: 'none', outline: 'none',
+              flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none',
               fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)', fontSize: 18,
               color: 'var(--text-primary)',
             }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 8, flexShrink: 0 }}>
             {/* Balance — fades out when pills are visible */}
             {balanceFormatted != null && (
               <span style={{

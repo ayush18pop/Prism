@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { useAccount } from 'wagmi'
+import { useAccount, useWriteContract, usePublicClient } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { toast } from 'sonner'
 import { ADDRESSES } from '@/lib/addresses'
+import { PRISM_HOOK_ABI } from '@/lib/abis'
 import { SectionLabel, StatusBadge, TokenPill, AddressChip } from '@/components/ui/index'
 import { StandingBidForm } from '@/components/lpd/StandingBidForm'
 import { useStandingBid } from '@/hooks/useStandingBid'
@@ -32,7 +34,36 @@ export default function LpdPage() {
   const { positions } = usePositionList(address)
   const isCorrectNetwork = chainId === 1301
   const [cancelConfirm, setCancelConfirm] = useState(false)
+  const [cancelLoading, setCancelLoading] = useState(false)
   const [selectedPoolIdx, setSelectedPoolIdx] = useState(1) // default: 0.05%
+  const { writeContractAsync } = useWriteContract()
+  const client = usePublicClient({ chainId: 1301 })
+
+  async function handleCancel() {
+    if (!selectedPool?.poolId || !ADDRESSES.PrismHook) return
+    if (!client) { toast.error('No RPC client, check chain connection'); return }
+    setCancelLoading(true)
+    try {
+      const tx = await writeContractAsync({
+        address: ADDRESSES.PrismHook,
+        abi: PRISM_HOOK_ABI,
+        functionName: 'cancelStandingBid',
+        args: [selectedPool.poolId],
+        chainId: 1301,
+      })
+      const receipt = await client.waitForTransactionReceipt({ hash: tx })
+      if (receipt.status === 'reverted') throw new Error('Transaction reverted on-chain')
+      toast.success('Standing bid cancelled — USDC refunded', {
+        action: { label: 'View tx ↗', onClick: () => window.open('https://unichain-sepolia.blockscout.com/tx/' + tx, '_blank') },
+      })
+      setCancelConfirm(false)
+    } catch (e: unknown) {
+      const msg = (e as { shortMessage?: string; message: string }).shortMessage ?? (e as Error).message
+      toast.error('Cancel failed', { description: msg.slice(0, 120) })
+    } finally {
+      setCancelLoading(false)
+    }
+  }
 
   const selectedPool = POOL_CONFIGS[selectedPoolIdx]
   const poolStatus = usePoolInitialized(selectedPool?.poolId)
@@ -253,13 +284,16 @@ export default function LpdPage() {
                   Keep bid
                 </button>
                 <button
+                  onClick={handleCancel}
+                  disabled={cancelLoading}
                   style={{
                     padding: '6px 14px', background: 'none',
                     border: '1px solid rgba(220,38,38,0.4)', color: 'var(--negative)',
-                    fontSize: 12, cursor: 'pointer',
+                    fontSize: 12, cursor: cancelLoading ? 'not-allowed' : 'pointer',
+                    opacity: cancelLoading ? 0.5 : 1,
                   }}
                 >
-                  Confirm cancel
+                  {cancelLoading ? '…' : 'Confirm cancel'}
                 </button>
               </div>
             ) : (

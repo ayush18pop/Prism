@@ -33,81 +33,83 @@ export function MechanismSection() {
             lineHeight: 1.15, letterSpacing: '-0.03em',
             color: 'var(--text-primary)', maxWidth: 600,
           }}>
-            The LP deposits.<br />
+            The LP deposits once.<br />
             <span style={{ color: 'var(--text-tertiary)' }}>
-              The hook handles everything else.
+              The hook splits the position, matches the bid, locks collateral. All in the same block.
             </span>
           </h2>
         </div>
 
-        {/* Transaction view — not steps */}
+        {/* Block execution trace */}
         <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2,
           marginBottom: 48,
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-default)',
+          padding: '28px 32px',
+          fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)',
         }}>
-          {/* Before */}
+          {/* Header */}
           <div style={{
-            padding: '28px 32px',
-            background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
+            fontSize: 10, letterSpacing: '0.14em', color: 'var(--text-tertiary)',
+            marginBottom: 20, paddingBottom: 14, borderBottom: '1px solid var(--border-subtle)',
           }}>
-            <p style={{
-              fontSize: 10, fontWeight: 500, letterSpacing: '0.15em',
-              textTransform: 'uppercase', color: 'var(--text-tertiary)',
-              marginBottom: 20,
-            }}>
-              What the LP sends
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[
-                'poolKey (USDC/PRISM, fee, tickSpacing, hook)',
-                'tickLower, tickUpper',
-                'liquidityDelta',
-              ].map(line => (
-                <p key={line} style={{
-                  fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)',
-                  fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6,
-                }}>
-                  {line}
-                </p>
-              ))}
-            </div>
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 16, lineHeight: 1.6 }}>
-              Identical to any standard v4 deposit. No extra steps.
-            </p>
+            BLOCK N  ·  afterAddLiquidity(key, params, delta, hookData)
           </div>
 
-          {/* After */}
-          <div style={{
-            padding: '28px 32px',
-            background: 'var(--bg-raised)', border: '1px solid var(--border-default)',
-          }}>
-            <p style={{
-              fontSize: 10, fontWeight: 500, letterSpacing: '0.15em',
-              textTransform: 'uppercase', color: 'var(--text-tertiary)',
-              marginBottom: 20,
-            }}>
-              What ends up in the LP wallet
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[
-                { label: 'LP-Y token', color: 'var(--lpy-base)', note: 'fee yield, zero delta' },
-                { label: 'LP-D token*', color: 'var(--lpd-base)', note: 'if no standing bid matched' },
-              ].map(({ label, color, note }) => (
-                <div key={label} style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                  <p style={{
-                    fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)',
-                    fontSize: 12, color, lineHeight: 1.6, flexShrink: 0,
-                  }}>
-                    {label}
-                  </p>
-                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{note}</p>
-                </div>
-              ))}
+          {/* Trace lines */}
+          {[
+            { n: '01', text: 'posId = keccak256(poolId ‖ lp ‖ ticks ‖ block.number)' },
+            { n: '02', text: 'mint LP-Y  →  lp', color: 'var(--lpy-base)' },
+            { n: '03', text: 'standingBids[poolId].pricePerUnit ≥ maxIL ?' },
+          ].map(({ n, text, color }) => (
+            <div key={n} style={{ display: 'flex', gap: 20, marginBottom: 10, fontSize: 12, lineHeight: 1.6 }}>
+              <span style={{ color: 'var(--text-tertiary)', minWidth: 20 }}>{n}</span>
+              <span style={{ color: color ?? 'var(--text-secondary)' }}>{text}</span>
             </div>
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 16, lineHeight: 1.6 }}>
-              * If a standing bid matched, LP-D was already sold in the same transaction.
-              LP-Y only. IL: $0.
-            </p>
+          ))}
+
+          {/* Branch */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, marginTop: 4, marginBottom: 16 }}>
+            <div style={{
+              padding: '16px 20px',
+              borderLeft: '2px solid var(--lpy-base)',
+              background: 'var(--lpy-muted)',
+            }}>
+              <div style={{ fontSize: 10, color: 'var(--lpy-base)', letterSpacing: '0.1em', marginBottom: 10 }}>
+                ├─ YES, bid fills
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 2 }}>
+                <div>LP-D  →  protocol wallet</div>
+                <div style={{ color: 'var(--vault-base)' }}>vault  ←  bid.collateral (USDC)</div>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 8 }}>
+                LP exits with zero IL exposure
+              </div>
+            </div>
+            <div style={{
+              padding: '16px 20px',
+              borderLeft: '1px solid var(--border-subtle)',
+              background: 'var(--bg-raised)',
+            }}>
+              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', letterSpacing: '0.1em', marginBottom: 10 }}>
+                └─ NO, no match
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 2 }}>
+                <div>LP-D  →  lp (held)</div>
+                <div style={{ color: 'var(--text-tertiary)' }}>no vault, no collateral locked</div>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 8 }}>
+                LP self-insures or sells LP-D later
+              </div>
+            </div>
+          </div>
+
+          {/* Final emit */}
+          <div style={{ display: 'flex', gap: 20, fontSize: 12, lineHeight: 1.6 }}>
+            <span style={{ color: 'var(--text-tertiary)', minWidth: 20 }}>04</span>
+            <span style={{ color: 'var(--text-tertiary)' }}>
+              emit PositionOpened(posId, sqrtPrice, tickLower, tickUpper, collateral)
+            </span>
           </div>
         </div>
 
@@ -134,15 +136,16 @@ export function MechanismSection() {
                 Every deposit fills atomically.
               </p>
               <p style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
-                No per-deposit transactions. No keeper bots. No manual settlement.
-                The bid fills or doesn&apos;t, at deposit time, in the same block.
+                A protocol puts USDC in once. Every LP that deposits after that gets
+                matched automatically. No keepers, no per-deposit approvals,
+                no separate settlement step. It fills or it doesn&apos;t, right at deposit time.
               </p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {[
-                { field: 'pricePerUnit', desc: 'IL coverage fraction (0.0 to 1.0). Must cover maxIL to fill.' },
-                { field: 'feeShareBpsLPD', desc: 'Ongoing fee share earned by LP-D holder per swap.' },
-                { field: 'maxCollateral', desc: 'Total USDC pre-deposited. Used proportionally across fills.' },
+                { field: 'pricePerUnit', desc: 'IL fraction the protocol commits to cover. Must exceed the position\'s maxIL, otherwise the bid gets skipped quietly.' },
+                { field: 'feeShareBpsLPD', desc: 'Basis points of swap fees routed to LP-D holder per trade. LP-Y earns the remainder.' },
+                { field: 'maxCollateral', desc: 'Total USDC budget. Allocated proportionally across matched deposits until exhausted.' },
               ].map(({ field, desc }) => (
                 <div key={field}>
                   <p style={{

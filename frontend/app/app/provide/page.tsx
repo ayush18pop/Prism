@@ -17,7 +17,7 @@ export default function ProvidePage() {
   const { address, isConnected } = useAccount()
   const bid = useStandingBid(ADDRESSES.poolId)
   const { sqrtPriceX96, tick } = usePoolPrice()
-  const { positions } = usePositionList(address)
+  const { positions, isLoading: positionsLoading } = usePositionList(address)
   const [showSettled, setShowSettled] = useState(false)
 
   return (
@@ -90,6 +90,16 @@ export default function ProvidePage() {
           {!isConnected ? (
             <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', padding: '32px', textAlign: 'center' }}>
               <p className="text-body" style={{ color: 'var(--text-tertiary)' }}>Connect to see your positions</p>
+            </div>
+          ) : positionsLoading ? (
+            <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {[40, 60, 50].map((w, i) => (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ height: 12, background: 'var(--bg-raised)', width: `${w}%`, animation: 'live-pulse 1.6s ease-in-out infinite' }} />
+                  <div style={{ height: 10, background: 'var(--bg-raised)', width: `${w + 15}%`, opacity: 0.6, animation: 'live-pulse 1.6s ease-in-out 200ms infinite' }} />
+                </div>
+              ))}
+              <p className="text-small" style={{ color: 'var(--text-tertiary)', marginTop: 4 }}>Scanning on-chain events…</p>
             </div>
           ) : positions.length === 0 ? (
             <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', padding: '48px 24px', textAlign: 'center' }}>
@@ -216,13 +226,13 @@ function PositionCardRedesigned({
           },
           {
             label: lpDSold ? 'Vault Remaining' : 'Collateral',
-            value: (lpDSold ? collateralVault : '—') as string,
+            value: (lpDSold ? collateralVault : '--') as string,
             format: 'raw' as const,
             accent: 'var(--vault-base)',
           },
           {
             label: 'IL Compensation',
-            value: (ilCompensationRaw > 0n ? ilCompensation : '—') as string,
+            value: (ilCompensationRaw > 0n ? ilCompensation : '--') as string,
             format: 'raw' as const,
             accent: ilCompensationRaw > 0n ? 'var(--positive)' : undefined,
           },

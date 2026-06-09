@@ -157,3 +157,68 @@ export function useSetStandingBid() {
 export function useClaimFeesLPD() {
   return useWriteContract()
 }
+
+const FEES_CLAIMED_EVENT = parseAbiItem(
+  'event FeesClaimed(bytes32 indexed posId, address recipient, uint256 fees0, uint256 fees1)'
+)
+const LPD_FEES_CLAIMED_EVENT = parseAbiItem(
+  'event LPDFeesClaimed(bytes32 indexed posId, address recipient, uint256 amount0, uint256 amount1)'
+)
+
+export interface FeeHistory {
+  lpYTotal0: bigint   // LP-Y portion of token0 (USDC) across all claims
+  lpYTotal1: bigint   // LP-Y portion of token1 (PRISM) across all claims
+  lpDTotal0: bigint   // LP-D portion claimed (token0)
+  lpDTotal1: bigint   // LP-D portion claimed (token1)
+  claimCount: number
+}
+
+export function useFeeHistory(
+  posId: `0x${string}` | undefined,
+  feeShareBpsLPD: number,
+) {
+  const client = usePublicClient({ chainId: 1301 })
+  return useQuery<FeeHistory>({
+    queryKey: ['feeHistory', posId, ADDRESSES.PrismHook],
+    queryFn: async () => {
+      if (!client || !posId || !ADDRESSES.PrismHook) {
+        return { lpYTotal0: 0n, lpYTotal1: 0n, lpDTotal0: 0n, lpDTotal1: 0n, claimCount: 0 }
+      }
+      const [lpYLogs, lpdLogs] = await Promise.all([
+        client.getLogs({
+          address: ADDRESSES.PrismHook,
+          event: FEES_CLAIMED_EVENT,
+          args: { posId },
+          fromBlock: ADDRESSES.deployBlock,
+          toBlock: 'latest',
+        }),
+        client.getLogs({
+          address: ADDRESSES.PrismHook,
+          event: LPD_FEES_CLAIMED_EVENT,
+          args: { posId },
+          fromBlock: ADDRESSES.deployBlock,
+          toBlock: 'latest',
+        }),
+      ])
+
+      const phi = BigInt(feeShareBpsLPD)
+      let lpYTotal0 = 0n, lpYTotal1 = 0n
+      for (const log of lpYLogs) {
+        const f0 = (log.args.fees0 ?? 0n) as bigint
+        const f1 = (log.args.fees1 ?? 0n) as bigint
+        lpYTotal0 += f0 * (10000n - phi) / 10000n
+        lpYTotal1 += f1 * (10000n - phi) / 10000n
+      }
+
+      let lpDTotal0 = 0n, lpDTotal1 = 0n
+      for (const log of lpdLogs) {
+        lpDTotal0 += (log.args.amount0 ?? 0n) as bigint
+        lpDTotal1 += (log.args.amount1 ?? 0n) as bigint
+      }
+
+      return { lpYTotal0, lpYTotal1, lpDTotal0, lpDTotal1, claimCount: lpYLogs.length }
+    },
+    enabled: !!client && !!posId && !!ADDRESSES.PrismHook,
+    refetchInterval: 30_000,
+  })
+}

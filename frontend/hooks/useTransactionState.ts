@@ -44,7 +44,7 @@ function parseError(e: unknown): string {
   }
   // Network
   if (err.message?.includes('network') || err.message?.includes('fetch')) {
-    return 'Connection issue — try again'
+    return 'Connection issue, try again'
   }
   if (err.shortMessage) return err.shortMessage.slice(0, 120)
   if (err.message)      return err.message.slice(0, 120)
@@ -72,8 +72,9 @@ export function useTransactionState(): [TxState, TxActions] {
       }
       const hash = await fn()
       setState({ step: 'tx_pending', txHash: hash, error: null })
-      const receipt = await client?.waitForTransactionReceipt({ hash })
-      if (receipt?.status === 'reverted') throw new Error('Transaction reverted on-chain')
+      if (!client) throw new Error('No RPC client — check chain connection')
+      const receipt = await client.waitForTransactionReceipt({ hash })
+      if (receipt.status === 'reverted') throw new Error('Transaction reverted on-chain')
       setState({ step: 'success', txHash: hash, error: null })
     } catch (e) {
       setState({ step: 'error', txHash: null, error: parseError(e) })

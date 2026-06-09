@@ -6,6 +6,7 @@ import { useState, useRef } from 'react'
 import { toast } from 'sonner'
 import { ADDRESSES, DEMO_POOL_KEY } from '@/lib/addresses'
 import { PRISM_HOOK_ABI, PRISM_ROUTER_ABI } from '@/lib/abis'
+import type { FeeHistory } from '@/hooks/usePrismHook'
 
 const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000' as const
 const BLOCKSCOUT = 'https://unichain-sepolia.blockscout.com/tx/'
@@ -15,6 +16,7 @@ interface ClaimPanelProps {
   ilComp: bigint
   lpdClaimable: bigint
   lpDFees: { amount0: bigint; amount1: bigint }
+  feeHistory?: FeeHistory
   settled: boolean
   lpDHolder: `0x${string}`
   account: `0x${string}`
@@ -23,8 +25,13 @@ interface ClaimPanelProps {
   liquidity: bigint
 }
 
+function fmtFee(amount: bigint, decimals: number): string {
+  const n = parseFloat(formatUnits(amount, decimals))
+  return n < 0.0001 ? '<0.0001' : n.toFixed(4).replace(/\.?0+$/, '')
+}
+
 export function ClaimPanel({
-  posId, ilComp, lpdClaimable, lpDFees, settled,
+  posId, ilComp, lpdClaimable, lpDFees, feeHistory, settled,
   lpDHolder, account, tickLower, tickUpper, liquidity,
 }: ClaimPanelProps) {
   const client = usePublicClient({ chainId: 1301 })
@@ -42,11 +49,12 @@ export function ClaimPanel({
   const hook = ADDRESSES.PrismHook
 
   async function exec(key: string, label: string, fn: () => Promise<`0x${string}`>) {
+    if (!client) { toast.error('No RPC client, check chain connection'); return }
     setLoading(key)
     try {
       const tx = await fn()
-      const receipt = await client?.waitForTransactionReceipt({ hash: tx })
-      if (receipt?.status === 'reverted') throw new Error('Transaction reverted on-chain')
+      const receipt = await client.waitForTransactionReceipt({ hash: tx })
+      if (receipt.status === 'reverted') throw new Error('Transaction reverted on-chain')
       toast.success(label, {
         description: 'Transaction confirmed',
         action: { label: 'View ↗', onClick: () => window.open(BLOCKSCOUT + tx, '_blank') },
@@ -107,8 +115,16 @@ export function ClaimPanel({
           accentColor="var(--text-secondary)"
           mutedBg="var(--bg-raised)"
           mutedBorder="var(--border-subtle)"
-          label="Swap Fees"
-          value="LP-Y share"
+          label="Swap Fees · LP-Y"
+          value={(() => {
+            if (!feeHistory || feeHistory.claimCount === 0) return 'accumulating...'
+            const parts = [
+              feeHistory.lpYTotal0 > 0n ? `${fmtFee(feeHistory.lpYTotal0, 6)} USDC` : '',
+              feeHistory.lpYTotal1 > 0n ? `${fmtFee(feeHistory.lpYTotal1, 6)} PRISM` : '',
+            ].filter(Boolean)
+            return parts.length > 0 ? parts.join(' + ') : 'accumulating...'
+          })()}
+          sublabel={feeHistory && feeHistory.claimCount > 0 ? `${feeHistory.claimCount} claim${feeHistory.claimCount !== 1 ? 's' : ''} total` : undefined}
           btnLabel="Claim Fees"
           loading={loading === 'fees-y'}
           onClick={() => exec('fees-y', 'Swap fees claimed', () =>
@@ -152,15 +168,21 @@ export function ClaimPanel({
       {/* LP-D Fee share */}
       {isLPDHolder && hasLPDFees && (
         <ActionRow
-          accentColor="var(--lpy-base)"
-          mutedBg="var(--lpy-muted)"
-          mutedBorder="var(--lpy-border)"
-          label="LP-D Fee Share"
+          accentColor="var(--lpd-base)"
+          mutedBg="var(--lpd-muted)"
+          mutedBorder="var(--lpd-border)"
+          label="Swap Fees · LP-D"
           value={[
-            lpDFees.amount0 > 0n ? `${formatUnits(lpDFees.amount0, 6)} USDC` : '',
-            lpDFees.amount1 > 0n ? `${formatUnits(lpDFees.amount1, 6)} PRISM` : '',
+            lpDFees.amount0 > 0n ? `${fmtFee(lpDFees.amount0, 6)} USDC` : '',
+            lpDFees.amount1 > 0n ? `${fmtFee(lpDFees.amount1, 6)} PRISM` : '',
           ].filter(Boolean).join(' + ')}
-          btnLabel="Claim Fees"
+          sublabel={feeHistory && (feeHistory.lpDTotal0 > 0n || feeHistory.lpDTotal1 > 0n)
+            ? `${[
+                feeHistory.lpDTotal0 > 0n ? `${fmtFee(feeHistory.lpDTotal0, 6)} USDC` : '',
+                feeHistory.lpDTotal1 > 0n ? `${fmtFee(feeHistory.lpDTotal1, 6)} PRISM` : '',
+              ].filter(Boolean).join(' + ')} earned total`
+            : undefined}
+          btnLabel="Claim"
           loading={loading === 'fees-d'}
           onClick={() => exec('fees-d', 'LP-D fees claimed', () =>
             write({ address: hook, abi: PRISM_HOOK_ABI, functionName: 'claimFeesLPD', args: [DEMO_POOL_KEY, posId], chainId: 1301 })
@@ -207,12 +229,13 @@ export function ClaimPanel({
   )
 }
 
-function ActionRow({ accentColor, mutedBg, mutedBorder, label, value, btnLabel, loading, onClick }: {
+function ActionRow({ accentColor, mutedBg, mutedBorder, label, value, sublabel, btnLabel, loading, onClick }: {
   accentColor: string
   mutedBg: string
   mutedBorder: string
   label: string
   value: string
+  sublabel?: string
   btnLabel: string
   loading: boolean
   onClick: () => void
@@ -225,6 +248,9 @@ function ActionRow({ accentColor, mutedBg, mutedBorder, label, value, btnLabel, 
       <div>
         <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: accentColor }}>{label}</p>
         <p style={{ fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)', fontSize: 13, color: 'var(--text-primary)', marginTop: 2 }}>{value}</p>
+        {sublabel && (
+          <p style={{ fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)', fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{sublabel}</p>
+        )}
       </div>
       <button
         disabled={loading}

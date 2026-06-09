@@ -33,8 +33,8 @@ export function PitchSection() {
           lineHeight: 1.15, letterSpacing: '-0.03em',
           color: 'var(--text-primary)', marginBottom: 32,
         }}>
-          AMMs price liquidity correctly.<br />
-          <span style={{ color: 'var(--text-tertiary)' }}>They just don&apos;t pay for it correctly.</span>
+          LPs sign up for fees.<br />
+          <span style={{ color: 'var(--text-tertiary)' }}>They also get a short position on volatility they never priced.</span>
         </h2>
 
         <div style={{
@@ -43,30 +43,27 @@ export function PitchSection() {
           marginBottom: 56,
         }}>
           <p style={{ fontSize: 15, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
-            An LP signs up for fee income. What they actually get is fee income
-            plus a short position on volatility they never agreed to price.
-            Not disclosed. Just a structural consequence of providing liquidity on
-            a constant product curve. The more price moves, the more the AMM
-            routes against them.
+            It&apos;s not disclosed anywhere. Just structural. Every trade that moves the
+            price extracts value from the LP. The constant product curve routes
+            against them by design. The more the market moves, the worse
+            the real P&L gets compared to just... holding.
           </p>
           <p style={{ fontSize: 15, lineHeight: 1.7, color: 'var(--text-tertiary)' }}>
-            Protocols know this math. The standard fix is token emissions:
-            pay LPs enough on top to compensate for what the AMM takes.
-            It works until emissions stop.
-            Then LPs calculate their real P&L and leave.
-            Every major DeFi liquidity crisis follows the same script.
+            The usual response is token emissions. Overpay LPs until the
+            math looks okay on paper. It works while the token price holds up.
+            When emissions dry out, LPs run the actual numbers and leave.
+            Every big DeFi liquidity crisis goes the same way.
           </p>
         </div>
 
-        {/* The actual insight — one line, no italic crescendo */}
         <p style={{
           fontSize: 'clamp(18px, 2.5vw, 28px)', fontWeight: 500,
           lineHeight: 1.3, letterSpacing: '-0.02em',
           color: 'var(--text-primary)',
           paddingTop: 32, borderTop: '1px solid var(--border-default)',
         }}>
-          Liquidity provision and price exposure were never supposed
-          to be the same trade.
+          Fee yield and price exposure are two different trades.
+          AMMs bundle them. Prism separates them.
         </p>
 
       </div>

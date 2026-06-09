@@ -43,20 +43,21 @@ export function StandingBidForm({ poolId }: StandingBidFormProps) {
       setError('Contracts not yet deployed. Fill addresses.ts after running Deploy.s.sol')
       return
     }
+    if (!client) { setError('No RPC client, check chain connection'); return }
     setError('')
     try {
       setStep('approving')
       const usdcAmount   = parseUnits(maxUsdc, 6)
       const approveTx    = await write({ address: ADDRESSES.USDC, abi: ERC20_ABI, functionName: 'approve', args: [ADDRESSES.PrismHook, usdcAmount], chainId: 1301 })
-      const approveReceipt = await client?.waitForTransactionReceipt({ hash: approveTx })
-      if (approveReceipt?.status === 'reverted') throw new Error('Approve reverted on-chain')
+      const approveReceipt = await client.waitForTransactionReceipt({ hash: approveTx })
+      if (approveReceipt.status === 'reverted') throw new Error('Approve reverted on-chain')
 
       setStep('setting')
       const pricePerUnit = BigInt(Math.floor(parseFloat(coverage) * 1e18))
       const feeShareBps  = BigInt(Math.min(10000, Math.round(parseFloat(feeSharePct) * 100)))
       const setBidTx     = await write({ address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'setStandingBid', args: [poolId, pricePerUnit, feeShareBps, usdcAmount], chainId: 1301 })
-      const setBidReceipt = await client?.waitForTransactionReceipt({ hash: setBidTx })
-      if (setBidReceipt?.status === 'reverted') throw new Error('setStandingBid reverted on-chain')
+      const setBidReceipt = await client.waitForTransactionReceipt({ hash: setBidTx })
+      if (setBidReceipt.status === 'reverted') throw new Error('setStandingBid reverted on-chain')
       setStep('done')
       refetch()
       toast.success('Standing bid set', {
@@ -73,13 +74,16 @@ export function StandingBidForm({ poolId }: StandingBidFormProps) {
 
   async function cancel() {
     if (!poolId || !ADDRESSES.PrismHook) return
+    if (!client) { setError('No RPC client, check chain connection'); return }
     setError('')
     try {
       const tx = await write({ address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'cancelStandingBid', args: [poolId], chainId: 1301 })
-      const cancelReceipt = await client?.waitForTransactionReceipt({ hash: tx })
-      if (cancelReceipt?.status === 'reverted') throw new Error('cancelStandingBid reverted on-chain')
+      const cancelReceipt = await client.waitForTransactionReceipt({ hash: tx })
+      if (cancelReceipt.status === 'reverted') throw new Error('cancelStandingBid reverted on-chain')
       refetch()
-      toast.success('Standing bid cancelled')
+      toast.success('Standing bid cancelled — USDC refunded', {
+        action: { label: 'View tx ↗', onClick: () => window.open(BLOCKSCOUT + tx, '_blank') },
+      })
     } catch (e: unknown) {
       const msg = (e as { shortMessage?: string; message: string }).shortMessage ?? (e as Error).message
       setError(msg)

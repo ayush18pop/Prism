@@ -15,6 +15,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             color: 'var(--text-primary)',
             borderRadius: 0,
           },
+          actionButtonStyle: {
+            background: 'var(--border-strong)',
+            color: 'var(--text-primary)',
+            borderRadius: 0,
+            fontSize: 11,
+            fontWeight: 500,
+            padding: '4px 10px',
+            cursor: 'pointer',
+          },
         }}
       />
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>

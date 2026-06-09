@@ -22,17 +22,21 @@ export function usePositionList(address: `0x${string}` | undefined) {
       if (!client || !address || !ADDRESSES.PrismHook) return []
       const current = await client.getBlockNumber()
       const from = BigInt(ADDRESSES.deployBlock)
-      const allLogs: typeof logs = []
-      let logs: Awaited<ReturnType<typeof client.getLogs>> = []
+
+      // Build all ranges then fetch in parallel instead of sequentially
+      const ranges: { from: bigint; to: bigint }[] = []
       for (let b = from; b <= current; b += CHUNK) {
-        const chunk = await client.getLogs({
+        ranges.push({ from: b, to: b + CHUNK - 1n > current ? current : b + CHUNK - 1n })
+      }
+      const chunks = await Promise.all(
+        ranges.map(r => client.getLogs({
           address: ADDRESSES.PrismHook,
           event: POSITION_OPENED,
-          fromBlock: b,
-          toBlock: b + CHUNK - 1n > current ? current : b + CHUNK - 1n,
-        })
-        allLogs.push(...chunk)
-      }
+          fromBlock: r.from,
+          toBlock: r.to,
+        }))
+      )
+      const allLogs = chunks.flat()
       // extract posIds from all events (they're all relevant; filter by lp later in PositionCard)
       return allLogs.map(l => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

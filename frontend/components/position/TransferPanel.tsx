@@ -47,8 +47,9 @@ export function TransferPanel({ posId, account, lpYBal, lpDBal }: TransferPanelP
         args: [account, recipient as `0x${string}`, tokenId, bal, ZERO_BYTES],
         chainId: 1301,
       })
-      const receipt = await client?.waitForTransactionReceipt({ hash: tx })
-      if (receipt?.status === 'reverted') throw new Error('Transfer reverted on-chain')
+      if (!client) throw new Error('No RPC client, check chain connection')
+      const receipt = await client.waitForTransactionReceipt({ hash: tx })
+      if (receipt.status === 'reverted') throw new Error('Transfer reverted on-chain')
       toast.success(`${token} transferred`, {
         description: `→ ${recipient.slice(0, 6)}…${recipient.slice(-4)}`,
         action: { label: 'View ↗', onClick: () => window.open(BLOCKSCOUT + tx, '_blank') },

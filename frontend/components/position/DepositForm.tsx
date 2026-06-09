@@ -192,18 +192,19 @@ export function DepositForm() {
 
   async function submit() {
     if (!ADDRESSES.PrismRouter || !ADDRESSES.USDC || !ADDRESSES.PRISM || !computed || !canSubmit) return
+    if (!client) { toast.error('No RPC client, check chain connection'); return }
     try {
       if (needsUsdcApprove) {
         setStep('approve0')
         const tx0 = await write({ address: ADDRESSES.USDC, abi: ERC20_ABI, functionName: 'approve', args: [ADDRESSES.PrismRouter, MAX_APPROVE], chainId: 1301 })
-        const r0 = await client?.waitForTransactionReceipt({ hash: tx0 })
-        if (r0?.status === 'reverted') throw new Error('USDC approve reverted on-chain')
+        const r0 = await client.waitForTransactionReceipt({ hash: tx0 })
+        if (r0.status === 'reverted') throw new Error('USDC approve reverted on-chain')
       }
       if (needsPrismApprove) {
         setStep('approve1')
         const tx1 = await write({ address: ADDRESSES.PRISM, abi: ERC20_ABI, functionName: 'approve', args: [ADDRESSES.PrismRouter, MAX_APPROVE], chainId: 1301 })
-        const r1 = await client?.waitForTransactionReceipt({ hash: tx1 })
-        if (r1?.status === 'reverted') throw new Error('PRISM approve reverted on-chain')
+        const r1 = await client.waitForTransactionReceipt({ hash: tx1 })
+        if (r1.status === 'reverted') throw new Error('PRISM approve reverted on-chain')
       }
       setStep('deposit')
       const tx2 = await write({
@@ -213,8 +214,8 @@ export function DepositForm() {
         args: [poolKey, { tickLower: tLower, tickUpper: tUpper, liquidityDelta: computed.liquidityDelta, salt: ZERO_BYTES32 }],
         chainId: 1301,
       })
-      const r2 = await client?.waitForTransactionReceipt({ hash: tx2 })
-      if (r2?.status === 'reverted') throw new Error('addLiquidity reverted on-chain')
+      const r2 = await client.waitForTransactionReceipt({ hash: tx2 })
+      if (r2.status === 'reverted') throw new Error('addLiquidity reverted on-chain')
       setLastTx(tx2)
       setStep('done')
       const usdcStr  = usdcNeeded  > 0n ? `${parseFloat(formatUnits(usdcNeeded,  6)).toFixed(2)} USDC`  : null
@@ -405,7 +406,7 @@ export function DepositForm() {
             fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)', fontSize: 14,
             color: (primaryToken === 'PRISM' ? usdcInsufficient : prismInsufficient) ? 'var(--negative)' : 'var(--text-secondary)',
           }}>
-            {primaryToken === 'PRISM' ? (usdcDisplay ?? '—') : (prismDisplay ?? '—')}
+            {primaryToken === 'PRISM' ? (usdcDisplay ?? '--') : (prismDisplay ?? '--')}
           </div>
           {primaryToken === 'PRISM' && usdcInsufficient && <span style={{ fontSize: 11, color: 'var(--negative)', marginTop: 4, display: 'block' }}>Insufficient USDC balance</span>}
           {primaryToken === 'USDC' && prismInsufficient && <span style={{ fontSize: 11, color: 'var(--negative)', marginTop: 4, display: 'block' }}>Insufficient PRISM balance</span>}

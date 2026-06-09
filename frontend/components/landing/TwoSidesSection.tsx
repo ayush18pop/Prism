@@ -32,9 +32,9 @@ export function TwoSidesSection() {
             lineHeight: 1.2, letterSpacing: '-0.025em',
             color: 'var(--text-primary)',
           }}>
-            Two rational actors.<br />
-            Different appetites.<br />
-            <span style={{ color: 'var(--text-tertiary)' }}>The same pool.</span>
+            One position, unbundled.<br />
+            LP-Y takes the yield.<br />
+            <span style={{ color: 'var(--text-tertiary)' }}>LP-D takes the delta.</span>
           </p>
         </div>
 
@@ -78,8 +78,9 @@ export function TwoSidesSection() {
               ))}
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
-              Whoever holds LP-Y at the time of exit receives the IL compensation.
-              Not whoever deposited. Whoever holds.
+              IL compensation follows the token, not the depositor.
+              Transfer LP-Y and the protection goes with it. The contract
+              checks your balance at claim time, not when you first deposited.
             </p>
           </div>
 
@@ -120,8 +121,9 @@ export function TwoSidesSection() {
               ))}
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
-              Collateral is only drawn on LP exit with adverse price movement.
-              If price holds or reverts, the LP-D holder keeps collateral and keeps earning.
+              Collateral only gets drawn when the LP exits underwater.
+              If price holds or comes back, the LP-D holder keeps all of it.
+              Plus whatever fee share they picked up along the way.
             </p>
           </div>
         </div>
@@ -141,9 +143,9 @@ export function TwoSidesSection() {
             CASE: LP holds both
           </p>
           <p style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-            When the same address holds LP-Y and LP-D, the IL settlement is internal.
-            Net effect is a standard Uniswap position. The split is still on-chain,
-            which lets protocols partition risk accounting without any external counterparty.
+            If you hold both tokens yourself, the IL settles internally. You end up
+            in the same place as a regular Uniswap LP. The split still happens on-chain
+            though, so the accounting stays clean if you need it.
           </p>
         </div>
 

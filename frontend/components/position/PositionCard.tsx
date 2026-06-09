@@ -5,7 +5,7 @@ import { useReadContract } from 'wagmi'
 import { ILStatusBadge } from './ILStatusBadge'
 import { ClaimPanel } from './ClaimPanel'
 import { TransferPanel } from './TransferPanel'
-import { usePosition, useVault, useILCompensation, useLPDClaimable, useLPDFeesClaimable } from '@/hooks/usePrismHook'
+import { usePosition, useVault, useILCompensation, useLPDClaimable, useLPDFeesClaimable, useFeeHistory } from '@/hooks/usePrismHook'
 import { ADDRESSES } from '@/lib/addresses'
 import { ERC1155_ABI } from '@/lib/abis'
 
@@ -23,6 +23,7 @@ export function PositionCard({ posId, currentSqrtPrice, currentTick, account, in
   const { data: ilComp }       = useILCompensation(posId)
   const { data: lpdClaimable } = useLPDClaimable(posId)
   const { data: lpDFees }      = useLPDFeesClaimable(posId)
+  const { data: feeHistory }   = useFeeHistory(posId, pos?.feeShareBpsLPD ? Number(pos.feeShareBpsLPD) : 0)
 
   const { data: lpYBal } = useReadContract({
     address: ADDRESSES.LPYToken,
@@ -99,7 +100,7 @@ export function PositionCard({ posId, currentSqrtPrice, currentTick, account, in
         <StatCell label="Liquidity" value={liquidity.toString()} mono dim />
         <StatCell
           label="Collateral Vault"
-          value={vaultUsd > 0 ? `${vaultUsd.toFixed(2)} USDC` : '—'}
+          value={vaultUsd > 0 ? `${vaultUsd.toFixed(2)} USDC` : '--'}
           extra={vaultFillPct != null && (
             <div className="mt-1.5 h-1 w-full rounded-full bg-white/[0.06] overflow-hidden">
               <div
@@ -111,9 +112,25 @@ export function PositionCard({ posId, currentSqrtPrice, currentTick, account, in
         />
         <StatCell
           label="IL Compensation"
-          value={(ilComp ?? 0n) > 0n ? `${formatUnits(ilComp!, 6)} USDC` : '—'}
+          value={(ilComp ?? 0n) > 0n ? `${formatUnits(ilComp!, 6)} USDC` : '--'}
           highlight={(ilComp ?? 0n) > 0n}
         />
+        {feeHistory && (feeHistory.lpYTotal0 > 0n || feeHistory.lpYTotal1 > 0n ||
+                        feeHistory.lpDTotal0 > 0n || feeHistory.lpDTotal1 > 0n) && (
+          <StatCell
+            label="Fees Earned (total)"
+            value={[
+              (feeHistory.lpYTotal0 + feeHistory.lpDTotal0) > 0n
+                ? `${formatUnits(feeHistory.lpYTotal0 + feeHistory.lpDTotal0, 6)} USDC`
+                : '',
+              (feeHistory.lpYTotal1 + feeHistory.lpDTotal1) > 0n
+                ? `${formatUnits(feeHistory.lpYTotal1 + feeHistory.lpDTotal1, 6)} PRISM`
+                : '',
+            ].filter(Boolean).join(' + ') || '--'}
+            highlight
+            span2
+          />
+        )}
       </div>
 
       {/* Claim + Transfer actions */}
@@ -124,6 +141,7 @@ export function PositionCard({ posId, currentSqrtPrice, currentTick, account, in
             ilComp={ilComp ?? 0n}
             lpdClaimable={lpdClaimable ?? 0n}
             lpDFees={lpDFees ? { amount0: lpDFees[0], amount1: lpDFees[1] } : { amount0: 0n, amount1: 0n }}
+            feeHistory={feeHistory}
             settled={settled}
             lpDHolder={lpDHolder}
             account={account}
@@ -177,11 +195,11 @@ function StatusChip({ label, color, pulse }: { label: string; color: 'emerald' |
   )
 }
 
-function StatCell({ label, value, mono, dim, highlight, extra }: {
-  label: string; value: string; mono?: boolean; dim?: boolean; highlight?: boolean; extra?: React.ReactNode
+function StatCell({ label, value, mono, dim, highlight, extra, span2 }: {
+  label: string; value: string; mono?: boolean; dim?: boolean; highlight?: boolean; extra?: React.ReactNode; span2?: boolean
 }) {
   return (
-    <div className="bg-zinc-950/40 px-5 py-4">
+    <div className={`bg-zinc-950/40 px-5 py-4 ${span2 ? 'col-span-2' : ''}`}>
       <p className="text-[10px] text-white/30 uppercase tracking-[0.2em] mb-1">{label}</p>
       <p className={`text-sm ${mono ? 'font-mono' : ''} ${dim ? 'text-white/25' : highlight ? 'text-emerald-400' : 'text-white'}`}>
         {value}

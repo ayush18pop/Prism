@@ -1,7 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import { useRef, useCallback } from 'react'
 import { PrismSplitAnimation } from '@/components/landing/PrismSplitAnimation'
+import { LiveTicker } from '@/components/landing/LiveTicker'
 
 const NAV_LINKS: [string, string][] = [
   ['#mechanism', 'How It Works'],
@@ -22,21 +24,33 @@ const PITCH_ROWS = [
 ]
 
 export function HeroSection() {
+  const sectionRef = useRef<HTMLElement>(null)
+
+  // The visitor's cursor is the light source entering the prism
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLElement>) => {
+    const el = sectionRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    el.style.setProperty('--mx', `${((e.clientX - rect.left) / rect.width) * 100}%`)
+    el.style.setProperty('--my', `${((e.clientY - rect.top) / rect.height) * 100}%`)
+  }, [])
+
   return (
-    <section style={{ background: 'var(--bg-base)', minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
+    <section
+      ref={sectionRef}
+      onMouseMove={handleMouseMove}
+      style={{ background: 'var(--bg-base)', minHeight: '100vh', position: 'relative', overflow: 'hidden' }}
+    >
 
       {/* Dot grid */}
       <div className="hero-dot-grid" style={{ opacity: 0.35 }} />
 
-      {/* Ambient glow — violet, very subtle */}
-      <div style={{
-        position: 'absolute',
-        width: 900, height: 500,
-        left: '50%', top: '55%',
-        transform: 'translate(-50%, -50%)',
-        background: 'radial-gradient(ellipse at center, rgba(124,58,237,0.05) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
+      {/* Refraction atmosphere — drifting spectral glows + grain + cursor light */}
+      <div className="aurora-amber" />
+      <div className="aurora-violet" />
+      <div className="aurora-teal" />
+      <div className="grain-overlay" />
+      <div className="hero-spotlight" />
 
       {/* ── Nav ──────────────────────────────────────────────── */}
       <nav style={{
@@ -135,20 +149,30 @@ export function HeroSection() {
           ))}
         </div>
 
-        {/* Spectrum bar — the visual signature */}
-        <div className="hero-rise-1 spectrum-bar-bright" style={{ marginBottom: 36 }} />
+        {/* Kicker — the mechanism in one line */}
+        <p className="hero-rise-1" style={{
+          fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)',
+          fontSize: 11, letterSpacing: '0.28em',
+          color: 'var(--text-tertiary)',
+          marginBottom: 28,
+        }}>
+          ONE POSITION <span style={{ color: 'var(--text-secondary)' }}>→</span>{' '}
+          <span style={{ color: 'var(--lpy-base)' }}>YIELD</span>
+          <span style={{ color: 'var(--text-secondary)' }}> + </span>
+          <span style={{ color: 'var(--lpd-base)' }}>RISK</span>
+        </p>
 
-        {/* Main headline — Instrument Serif */}
+        {/* Main headline — Instrument Serif with the spectrum refracted into one word */}
         <h1 className="hero-rise-2" style={{
           fontFamily: 'var(--font-display, Georgia, serif)',
-          fontSize: 'clamp(48px, 7vw, 88px)',
+          fontSize: 'clamp(52px, 7.5vw, 96px)',
           fontWeight: 400,
-          lineHeight: 1.0,
+          lineHeight: 1.02,
           letterSpacing: '-0.03em',
           color: 'var(--text-primary)',
-          marginBottom: 24,
+          marginBottom: 26,
         }}>
-          The IL options market.
+          The IL <em className="text-spectral" style={{ fontStyle: 'italic', paddingRight: '0.04em' }}>options</em> market.
         </h1>
 
         {/* Sub-headline */}
@@ -191,11 +215,22 @@ export function HeroSection() {
           </a>
         </div>
 
-        {/* Stats strip */}
-        <div className="hero-rise-4" style={{
+        {/* Live chain data — the protocol is real, right now */}
+        <div className="hero-rise-4" style={{ marginBottom: 64 }}>
+          <LiveTicker />
+        </div>
+      </div>
+
+      {/* ── Prism split animation — full container width ──── */}
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 40px 64px', position: 'relative' }}>
+        <PrismSplitAnimation />
+      </div>
+
+      {/* ── Stats strip — below the animation ───────────────── */}
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 40px 80px' }}>
+        <div style={{
           display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
           border: '1px solid var(--border-default)',
-          marginBottom: 64,
         }}>
           {STATS.map(({ value, label }, i) => (
             <div key={value} style={{
@@ -215,11 +250,6 @@ export function HeroSection() {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* ── Prism split animation — full container width ──── */}
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 40px 80px', position: 'relative' }}>
-        <PrismSplitAnimation />
       </div>
 
       {/* ── Pitch row — below the fold ───────────────────── */}

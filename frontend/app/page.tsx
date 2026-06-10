@@ -12,7 +12,8 @@ export default function LandingPage() {
       <MarketplaceSection />
       <DemoCallout />
       <TwoSidesSection />
-      <footer className="border-t border-white/5 bg-black py-8 text-center">
+      <div className="spectrum-bar-bright" />
+      <footer className="bg-black py-8 text-center">
         <p className="text-xs text-white/20 tracking-[0.15em] uppercase">
           Built for UHI9 · Unichain Sepolia · Reactive Network
         </p>

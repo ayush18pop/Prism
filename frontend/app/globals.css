@@ -165,3 +165,72 @@
 .hero-rise-2 { animation: hero-rise 700ms ease 240ms  both; }
 .hero-rise-3 { animation: hero-rise 700ms ease 380ms  both; }
 .hero-rise-4 { animation: hero-rise 700ms ease 520ms  both; }
+
+/* ── Spectral text — the brand gradient clipped into glyphs ───── */
+.text-spectral {
+  background: var(--spectrum);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Aurora atmosphere — two drifting refraction glows ───────── */
+@keyframes aurora-a {
+  0%, 100% { transform: translate(-6%, -4%) scale(1);    }
+  50%      { transform: translate(5%, 7%)   scale(1.18); }
+}
+@keyframes aurora-b {
+  0%, 100% { transform: translate(5%, 6%)   scale(1.12); }
+  50%      { transform: translate(-7%, -5%) scale(1);    }
+}
+.aurora-amber {
+  position: absolute; pointer-events: none;
+  width: 70vw; height: 60vh; left: -15vw; top: -18vh;
+  background: radial-gradient(ellipse at center, rgba(240,180,41,0.07) 0%, transparent 65%);
+  animation: aurora-a 26s ease-in-out infinite;
+}
+.aurora-violet {
+  position: absolute; pointer-events: none;
+  width: 75vw; height: 65vh; right: -20vw; bottom: -15vh;
+  background: radial-gradient(ellipse at center, rgba(124,58,237,0.08) 0%, transparent 65%);
+  animation: aurora-b 32s ease-in-out infinite;
+}
+.aurora-teal {
+  position: absolute; pointer-events: none;
+  width: 40vw; height: 40vh; left: 35%; top: 30%;
+  background: radial-gradient(ellipse at center, rgba(14,165,176,0.04) 0%, transparent 60%);
+  animation: aurora-a 38s ease-in-out infinite reverse;
+}
+
+/* ── Film grain — kills the flat-black AI look ────────────────── */
+.grain-overlay {
+  position: absolute; inset: 0; pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Cursor light — the visitor is the beam entering the prism ── */
+.hero-spotlight {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(
+    520px circle at var(--mx, 50%) var(--my, 35%),
+    rgba(240,180,41,0.045) 0%,
+    rgba(124,58,237,0.035) 45%,
+    transparent 70%
+  );
+  transition: opacity 400ms ease;
+}
+
+/* ── Live ticker ──────────────────────────────────────────────── */
+@keyframes ticker-pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+.ticker-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--positive);
+  animation: ticker-pulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-amber, .aurora-violet, .aurora-teal { animation: none; }
+  .hero-rise-0, .hero-rise-1, .hero-rise-2, .hero-rise-3, .hero-rise-4 { animation: none; }
+  .ticker-dot { animation: none; }
+}

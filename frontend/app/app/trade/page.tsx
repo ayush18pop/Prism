@@ -18,8 +18,9 @@ export default function TradePage() {
 
         {/* Headline — commanding size, tight tracking */}
         <h1 style={{
-          fontSize: 72, fontWeight: 500, lineHeight: 1,
-          letterSpacing: '-0.045em', color: 'var(--text-primary)',
+          fontFamily: 'var(--font-display, serif)',
+          fontSize: 72, fontWeight: 400, lineHeight: 1,
+          letterSpacing: '-0.03em', color: 'var(--text-primary)',
           margin: '0 0 20px',
         }}>
           Swap

@@ -6,38 +6,49 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    /* Backgrounds */
-    --bg-base:    #080808;
-    --bg-surface: #0F0F0F;
-    --bg-raised:  #161616;
-    --bg-overlay: #1C1C1C;
-    /* Borders */
-    --border-subtle:  #1A1A1A;
-    --border-default: #242424;
-    --border-strong:  #333333;
-    /* Text */
-    --text-primary:   #F2F2F2;
-    --text-secondary: #888888;
-    --text-tertiary:  #444444;
-    /* LP-Y amber */
+    /* ── Backgrounds ─── */
+    --bg-base:    #060608;
+    --bg-surface: #0C0C10;
+    --bg-raised:  #121218;
+    --bg-overlay: #18181F;
+
+    /* ── Borders ─── */
+    --border-subtle:  #16162A;
+    --border-default: #22223A;
+    --border-strong:  #34345A;
+
+    /* ── Text ─── */
+    --text-primary:   #ECEDF8;
+    --text-secondary: #7878A0;
+    --text-tertiary:  #3E4058;
+
+    /* ── LP-Y amber ─── */
     --lpy-base:   #F0B429;
-    --lpy-muted:  rgba(240,180,41,0.12);
-    --lpy-border: rgba(240,180,41,0.25);
-    /* LP-D violet */
+    --lpy-muted:  rgba(240,180,41,0.10);
+    --lpy-border: rgba(240,180,41,0.22);
+
+    /* ── LP-D violet ─── */
     --lpd-base:   #7C3AED;
-    --lpd-muted:  rgba(124,58,237,0.12);
-    --lpd-border: rgba(124,58,237,0.25);
-    /* Vault blue */
-    --vault-base:   #2775CA;
-    --vault-muted:  rgba(39,117,202,0.12);
-    --vault-border: rgba(39,117,202,0.25);
-    /* Semantic */
+    --lpd-muted:  rgba(124,58,237,0.10);
+    --lpd-border: rgba(124,58,237,0.22);
+
+    /* ── Vault / USDC blue ─── */
+    --vault-base:   #3B82C4;
+    --vault-muted:  rgba(59,130,196,0.10);
+    --vault-border: rgba(59,130,196,0.22);
+
+    /* ── Semantic ─── */
     --positive:       #16A34A;
-    --positive-muted: rgba(22,163,74,0.12);
+    --positive-muted: rgba(22,163,74,0.10);
     --negative:       #DC2626;
-    --negative-muted: rgba(220,38,38,0.12);
+    --negative-muted: rgba(220,38,38,0.10);
     --warning:        #D97706;
-    --warning-muted:  rgba(217,119,6,0.12);
+    --warning-muted:  rgba(217,119,6,0.10);
+
+    /* ── Spectrum ─── */
+    --teal:          #0EA5B0;
+    --spectrum:      linear-gradient(90deg, #F0B429 0%, #0EA5B0 50%, #7C3AED 100%);
+    --spectrum-rev:  linear-gradient(90deg, #7C3AED 0%, #0EA5B0 50%, #F0B429 100%);
   }
 
   html { background: var(--bg-base); color: var(--text-primary); }
@@ -61,17 +72,63 @@
   input[type=number] { -moz-appearance: textfield; }
 }
 
-/* ── Typography ──────────────────────────────────────────────── */
-.text-display { font-size: 28px; font-weight: 500; line-height: 1.2; letter-spacing: -0.02em; }
-.text-heading { font-size: 18px; font-weight: 500; line-height: 1.3; }
-.text-body    { font-size: 14px; font-weight: 400; line-height: 1.6; }
-.text-small   { font-size: 12px; font-weight: 400; line-height: 1.5; }
-.text-label   { font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; }
-.text-mono-lg { font-family: var(--font-mono,'JetBrains Mono',monospace); font-size: 22px; font-weight: 400; }
-.text-mono-md { font-family: var(--font-mono,'JetBrains Mono',monospace); font-size: 15px; font-weight: 400; }
-.text-mono-sm { font-family: var(--font-mono,'JetBrains Mono',monospace); font-size: 12px; font-weight: 400; }
+/* ── Typography ───────────────────────────────────────────────── */
+.font-display         { font-family: var(--font-display, 'Georgia', serif); }
+.text-display-xl      { font-family: var(--font-display, serif); font-size: clamp(52px, 7vw, 88px); font-weight: 400; line-height: 1.0; letter-spacing: -0.03em; }
+.text-display         { font-family: var(--font-display, serif); font-size: 28px; font-weight: 400; line-height: 1.2; letter-spacing: -0.02em; }
+.text-heading         { font-size: 18px; font-weight: 500; line-height: 1.3; }
+.text-body            { font-size: 14px; font-weight: 400; line-height: 1.6; }
+.text-small           { font-size: 12px; font-weight: 400; line-height: 1.5; }
+.text-label           { font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; }
+.text-mono-lg         { font-family: var(--font-mono,'JetBrains Mono',monospace); font-size: 22px; font-weight: 400; }
+.text-mono-md         { font-family: var(--font-mono,'JetBrains Mono',monospace); font-size: 15px; font-weight: 400; }
+.text-mono-sm         { font-family: var(--font-mono,'JetBrains Mono',monospace); font-size: 12px; font-weight: 400; }
 
-/* ── Animations ──────────────────────────────────────────────── */
+/* ── Spectrum ─────────────────────────────────────────────────── */
+.spectrum-bar {
+  height: 1px;
+  background: var(--spectrum);
+  opacity: 0.6;
+}
+
+.spectrum-bar-bright {
+  height: 1.5px;
+  background: var(--spectrum);
+  opacity: 0.9;
+}
+
+/* ── Dot grid (hero background) ───────────────────────────────── */
+.hero-dot-grid {
+  background-image: radial-gradient(var(--border-default) 1px, transparent 1px);
+  background-size: 28px 28px;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ── Liquid glass ─────────────────────────────────────────────── */
+.liquid-glass {
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+
+/* ── Scroll reveal ────────────────────────────────────────────── */
+.scroll-hidden  { opacity: 0; transform: translateY(14px); transition: opacity 600ms ease, transform 600ms ease; }
+.scroll-visible { opacity: 1; transform: none; }
+
+/* ── Prism cards ─────────────────────────────────────────────── */
+.prism-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+}
+.prism-card-raised {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+}
+
+/* ── Animations ───────────────────────────────────────────────── */
 @keyframes live-pulse    { 0%,100%{opacity:1} 50%{opacity:.3} }
 @keyframes fade-in-event { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
 @keyframes wallet-pulse  { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
@@ -83,18 +140,28 @@
   to   { clip-path: inset(0 0% 0 0); }
 }
 
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes spectrum-sweep {
+  0%   { opacity: 0.3; }
+  50%  { opacity: 0.9; }
+  100% { opacity: 0.3; }
+}
+
+@keyframes mkt-dash { to { stroke-dashoffset: -24; } }
+
 .live-pulse        { animation: live-pulse 2s ease-in-out infinite; }
 .event-entry       { animation: fade-in-event 200ms ease-out both; }
 .wallet-pulse-anim { animation: wallet-pulse 1.2s ease-in-out infinite; }
 .progress-anim     { animation: progress-opt 3s linear forwards; }
 .vault-fadein      { animation: vault-fadein 200ms ease-out 500ms both; }
+.spectrum-pulse    { animation: spectrum-sweep 4s ease-in-out infinite; }
 
-/* ── Prism card — flat, sharp borders ───────────────────────── */
-.prism-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-}
-.prism-card-raised {
-  background: var(--bg-raised);
-  border: 1px solid var(--border-default);
-}
+.hero-rise-0 { animation: hero-rise 700ms ease 0ms    both; }
+.hero-rise-1 { animation: hero-rise 700ms ease 120ms  both; }
+.hero-rise-2 { animation: hero-rise 700ms ease 240ms  both; }
+.hero-rise-3 { animation: hero-rise 700ms ease 380ms  both; }
+.hero-rise-4 { animation: hero-rise 700ms ease 520ms  both; }

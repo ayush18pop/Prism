@@ -1,6 +1,4 @@
-// TODO: run `forge build` in Prism/ to generate out/ before importing
-// These are placeholder ABIs until the contracts are compiled and deployed.
-// Updated for Phase 3.5.5: feeShareBpsLPD added to setStandingBid, purchaseLPD, claimFeesLPD added.
+// Updated for Phase 3.6: order book (postBid/cancelBid), ilCoverageBps on Position
 
 const POOL_KEY_COMPONENTS = [
   { name: 'currency0',   type: 'address' },
@@ -22,6 +20,8 @@ export const PRISM_HOOK_ABI = [
       { name: 'liquidity',       type: 'uint128'  },
       { name: 'lpDHolder',       type: 'address'  },
       { name: 'feeShareBpsLPD',  type: 'uint256'  },
+      { name: 'ilCoverageBps',   type: 'uint256'  },
+      { name: 'maxIL',           type: 'uint128'  },
       { name: 'lpDSold',         type: 'bool'     },
       { name: 'settled',         type: 'bool'     },
     ] }] },
@@ -29,25 +29,30 @@ export const PRISM_HOOK_ABI = [
   { name: 'lpYCompensation',     type: 'function', stateMutability: 'view', inputs: [{ name: 'posId', type: 'bytes32' }], outputs: [{ name: '', type: 'uint256' }] },
   { name: 'lpDClaimable',        type: 'function', stateMutability: 'view', inputs: [{ name: 'posId', type: 'bytes32' }], outputs: [{ name: '', type: 'uint256' }] },
   { name: 'lpDFeesClaimable',    type: 'function', stateMutability: 'view', inputs: [{ name: 'posId', type: 'bytes32' }], outputs: [{ name: 'amount0', type: 'uint256' }, { name: 'amount1', type: 'uint256' }] },
-  { name: 'standingBids', type: 'function', stateMutability: 'view',
-    inputs: [{ name: 'poolId', type: 'bytes32' }],
+  { name: 'bids', type: 'function', stateMutability: 'view',
+    inputs: [{ name: 'poolId', type: 'bytes32' }, { name: 'bidId', type: 'uint256' }],
     outputs: [{ name: '', type: 'tuple', components: [
       { name: 'bidder',          type: 'address' },
       { name: 'pricePerUnit',    type: 'uint256' },
       { name: 'feeShareBpsLPD',  type: 'uint256' },
+      { name: 'ilCoverageBps',   type: 'uint256' },
       { name: 'maxCollateral',   type: 'uint256' },
       { name: 'usedCollateral',  type: 'uint256' },
       { name: 'active',          type: 'bool'    },
     ] }] },
+  { name: 'nextBidId', type: 'function', stateMutability: 'view',
+    inputs: [{ name: 'poolId', type: 'bytes32' }], outputs: [{ name: '', type: 'uint256' }] },
   // writes
-  { name: 'setStandingBid', type: 'function', stateMutability: 'nonpayable',
+  { name: 'postBid', type: 'function', stateMutability: 'nonpayable',
     inputs: [
       { name: 'poolId',         type: 'bytes32' },
       { name: 'pricePerUnit',   type: 'uint256' },
       { name: 'feeShareBpsLPD', type: 'uint256' },
+      { name: 'ilCoverageBps',  type: 'uint256' },
       { name: 'maxCollateral',  type: 'uint256' },
-    ], outputs: [] },
-  { name: 'cancelStandingBid', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'poolId', type: 'bytes32' }], outputs: [] },
+    ], outputs: [{ name: 'bidId', type: 'uint256' }] },
+  { name: 'cancelBid', type: 'function', stateMutability: 'nonpayable',
+    inputs: [{ name: 'poolId', type: 'bytes32' }, { name: 'bidId', type: 'uint256' }], outputs: [] },
   { name: 'purchaseLPD', type: 'function', stateMutability: 'nonpayable',
     inputs: [
       { name: 'posId',            type: 'bytes32' },
@@ -60,7 +65,7 @@ export const PRISM_HOOK_ABI = [
   { name: 'claimFees',    type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'key', type: 'tuple', components: POOL_KEY_COMPONENTS }, { name: 'posId', type: 'bytes32' }], outputs: [] },
   { name: 'claimFeesLPD', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'key', type: 'tuple', components: POOL_KEY_COMPONENTS }, { name: 'posId', type: 'bytes32' }], outputs: [] },
   // events
-  { name: 'PositionOpened',   type: 'event', inputs: [{ name: 'posId', type: 'bytes32', indexed: true }, { name: 'entrySqrtPrice', type: 'uint160', indexed: false }, { name: 'tickLower', type: 'int24', indexed: false }, { name: 'tickUpper', type: 'int24', indexed: false }, { name: 'collateral', type: 'uint256', indexed: false }] },
+  { name: 'PositionOpened',   type: 'event', inputs: [{ name: 'posId', type: 'bytes32', indexed: true }, { name: 'entrySqrtPrice', type: 'uint160', indexed: false }, { name: 'tickLower', type: 'int24', indexed: false }, { name: 'tickUpper', type: 'int24', indexed: false }, { name: 'ilCoverageBps', type: 'uint256', indexed: false }, { name: 'collateral', type: 'uint256', indexed: false }] },
   { name: 'LPDAutoPurchased', type: 'event', inputs: [{ name: 'posId', type: 'bytes32', indexed: true }, { name: 'buyer', type: 'address', indexed: false }, { name: 'usdcCost', type: 'uint256', indexed: false }, { name: 'feeShareBpsLPD', type: 'uint256', indexed: false }] },
   { name: 'LPDSettled',       type: 'event', inputs: [{ name: 'posId', type: 'bytes32', indexed: true }, { name: 'ilCost', type: 'uint256', indexed: false }, { name: 'refundedToHolder', type: 'uint256', indexed: false }] },
   { name: 'LPDLiquidated',    type: 'event', inputs: [{ name: 'posId', type: 'bytes32', indexed: true }, { name: 'collateralConsumed', type: 'uint256', indexed: false }] },
@@ -69,6 +74,30 @@ export const PRISM_HOOK_ABI = [
   { name: 'ILCompensationClaimed', type: 'event', inputs: [{ name: 'posId', type: 'bytes32', indexed: true }, { name: 'recipient', type: 'address', indexed: false }, { name: 'usdc', type: 'uint256', indexed: false }] },
   { name: 'StandingBidSet',   type: 'event', inputs: [{ name: 'poolId', type: 'bytes32', indexed: true }, { name: 'bidder', type: 'address', indexed: false }, { name: 'pricePerUnit', type: 'uint256', indexed: false }, { name: 'feeShareBpsLPD', type: 'uint256', indexed: false }, { name: 'maxCollateral', type: 'uint256', indexed: false }] },
   { name: 'StandingBidCancelled', type: 'event', inputs: [{ name: 'poolId', type: 'bytes32', indexed: true }, { name: 'bidder', type: 'address', indexed: false }, { name: 'refunded', type: 'uint256', indexed: false }] },
+  // Order book events (Phase 3.6)
+  { name: 'BidPosted', type: 'event', inputs: [
+    { name: 'poolId',         type: 'bytes32', indexed: true  },
+    { name: 'bidId',          type: 'uint256', indexed: false },
+    { name: 'bidder',         type: 'address', indexed: false },
+    { name: 'pricePerUnit',   type: 'uint256', indexed: false },
+    { name: 'feeShareBpsLPD', type: 'uint256', indexed: false },
+    { name: 'ilCoverageBps',  type: 'uint256', indexed: false },
+    { name: 'maxCollateral',  type: 'uint256', indexed: false },
+  ] },
+  { name: 'BidCancelled', type: 'event', inputs: [
+    { name: 'poolId',   type: 'bytes32', indexed: true  },
+    { name: 'bidId',    type: 'uint256', indexed: false },
+    { name: 'bidder',   type: 'address', indexed: false },
+    { name: 'refunded', type: 'uint256', indexed: false },
+  ] },
+  { name: 'BidFilled', type: 'event', inputs: [
+    { name: 'posId',          type: 'bytes32', indexed: true  },
+    { name: 'bidId',          type: 'uint256', indexed: false },
+    { name: 'buyer',          type: 'address', indexed: false },
+    { name: 'usdcCost',       type: 'uint256', indexed: false },
+    { name: 'feeShareBpsLPD', type: 'uint256', indexed: false },
+    { name: 'ilCoverageBps',  type: 'uint256', indexed: false },
+  ] },
 ] as const
 
 export const ERC1155_ABI = [

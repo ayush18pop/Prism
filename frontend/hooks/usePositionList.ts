@@ -5,7 +5,7 @@ import { parseAbiItem } from 'viem'
 import { ADDRESSES } from '@/lib/addresses'
 
 const POSITION_OPENED = parseAbiItem(
-  'event PositionOpened(bytes32 indexed posId, uint160 entrySqrtPrice, int24 tickLower, int24 tickUpper, uint256 collateral)'
+  'event PositionOpened(bytes32 indexed posId, uint160 entrySqrtPrice, int24 tickLower, int24 tickUpper, uint256 ilCoverageBps, uint256 collateral)'
 )
 
 const CHUNK = 2000n

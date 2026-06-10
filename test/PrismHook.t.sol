@@ -50,7 +50,7 @@ contract PrismHookTest is Test {
     int24 constant TICK_SPACING = 60;
     uint24 constant FEE         = 3000;
 
-    // ── contracts ────────────────────────────────────────────────────────────
+    // -- contracts ------------------------------------------------------------
 
     PoolManager             poolManager;
     PoolModifyLiquidityTest modifyRouter;
@@ -62,21 +62,21 @@ contract PrismHookTest is Test {
     LPDToken                lpDToken;
     PrismHook               hook;
 
-    // ── pool ─────────────────────────────────────────────────────────────────
+    // -- pool -----------------------------------------------------------------
 
     PoolKey    key;
     Currency   currency0;
     Currency   currency1;
     bytes32    poolId;
 
-    // ── actors ───────────────────────────────────────────────────────────────
+    // -- actors ---------------------------------------------------------------
 
     address owner    = makeAddr("owner");
     address bidder   = makeAddr("bidder");
     address lp2      = makeAddr("lp2");
     address callback = makeAddr("callback");  // simulates PrismCallback / RSC path
 
-    // ── setup ─────────────────────────────────────────────────────────────────
+    // -- setup -----------------------------------------------------------------
 
     function setUp() public {
         poolManager  = new PoolManager(owner);
@@ -144,7 +144,7 @@ contract PrismHookTest is Test {
         usdc.approve(address(hook), type(uint256).max);
     }
 
-    // ── helpers ───────────────────────────────────────────────────────────────
+    // -- helpers ---------------------------------------------------------------
 
     /// Compute the posId that _will_ be created by a deposit call in the current block.
     /// sender in hook = address(modifyRouter).
@@ -199,7 +199,7 @@ contract PrismHookTest is Test {
         );
     }
 
-    // ── test 1: Settlement Case 1 — LP holds both tokens ─────────────────────
+    // -- test 1: Settlement Case 1 — LP holds both tokens ---------------------
 
     function test_settlementCase1_bothHeld_standardExit() public {
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
@@ -223,14 +223,14 @@ contract PrismHookTest is Test {
         assertEq(lpDCollateralVault(posId), 0,   "vault remains zero");
     }
 
-    // ── test 2: Settlement Case 2 — LP-D sold, IL drawn from collateral ──────
+    // -- test 2: Settlement Case 2 — LP-D sold, IL drawn from collateral ------
 
     function test_settlementCase2_lpDSold_ilDrawnFromCollateral() public {
         // Bidder sets a standing bid
         uint256 pricePerUnit  = 0.5e18; // 0.5 WAD per unit of liquidity
         uint256 maxCollateral = 10_000e6;
         vm.prank(bidder);
-        hook.setStandingBid(poolId, pricePerUnit, 3000, maxCollateral);
+        hook.setStandingBid(poolId, pricePerUnit, 3000, 10000, maxCollateral);
 
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
 
@@ -241,7 +241,7 @@ contract PrismHookTest is Test {
         assertEq(lpDToken.balanceOf(bidder, uint256(posId)), 1e18,            "bidder holds LP-D");
 
         // Move price down to force negative IL
-        _movePrice(true); // zeroForOne → price decreases if tokenA is currency1
+        _movePrice(true); // zeroForOne -> price decreases if tokenA is currency1
 
         _remove(posId, TICK_LOWER, TICK_UPPER, 1e18);
 
@@ -257,12 +257,12 @@ contract PrismHookTest is Test {
         assertEq(hook.lpYCompensation(posId), 0, "compensation cleared after claim");
     }
 
-    // ── test 3: Settlement Case 3 — RSC force-settle ─────────────────────────
+    // -- test 3: Settlement Case 3 — RSC force-settle -------------------------
 
     function test_settlementCase3_rscForced_collateralLiquidated() public {
         uint256 maxCollateral = 5_000e6;
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, maxCollateral);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, maxCollateral);
 
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
         assertGt(lpDCollateralVault(posId), 0, "vault must be funded");
@@ -288,12 +288,12 @@ contract PrismHookTest is Test {
         assertTrue(allocated, "collateral allocated post-settlement");
     }
 
-    // ── test 4: Standing bid auto-fill — adequate collateral ─────────────────
+    // -- test 4: Standing bid auto-fill — adequate collateral -----------------
 
     function test_standingBid_adequate_autoFills() public {
         uint256 maxCollateral = 50_000e6;
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, maxCollateral);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, maxCollateral);
 
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
 
@@ -308,12 +308,12 @@ contract PrismHookTest is Test {
         assertEq(pos.lpDHolder, bidder, "lpDHolder = bidder");
     }
 
-    // ── test 5: Standing bid silent skip — insufficient collateral ────────────
+    // -- test 5: Standing bid silent skip — insufficient collateral ------------
 
     function test_standingBid_insufficient_silentSkip() public {
         // pricePerUnit = 1 wei — cost is effectively 0, will not cover maxIL
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 1, 3000, 10_000e6);
+        hook.setStandingBid(poolId, 1, 3000, 10000, 10_000e6);
 
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
 
@@ -326,12 +326,12 @@ contract PrismHookTest is Test {
         assertFalse(pos.lpDSold, "lpDSold must remain false");
     }
 
-    // ── test 6: IL compensation follows LP-Y transfer ─────────────────────────
+    // -- test 6: IL compensation follows LP-Y transfer -------------------------
 
     function test_claimILComp_afterLpYTransfer_newHolderReceives() public {
         uint256 maxCollateral = 50_000e6;
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, maxCollateral);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, maxCollateral);
 
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
 
@@ -365,13 +365,13 @@ contract PrismHookTest is Test {
         assertEq(hook.lpYCompensation(posId), 0, "compensation cleared");
     }
 
-    // ── test 7: positionId collision resistance ───────────────────────────────
+    // -- test 7: positionId collision resistance -------------------------------
 
     function test_posId_sameRangeTwoBlocks_differentIds() public {
         vm.roll(100);
         bytes32 posId1 = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
 
-        // Roll forward — new block means new depositBlock → new posId
+        // Roll forward — new block means new depositBlock -> new posId
         vm.roll(101);
         // Need fresh token approval; also need to advance to avoid "same position" errors
         // Use a different tick range to avoid PoolManager position conflicts
@@ -387,26 +387,26 @@ contract PrismHookTest is Test {
         assertNotEq(p1.liquidity, p2.liquidity, "different liquidity confirms different positions");
     }
 
-    // ── Phase 3.5.5 — Fee Split Tests ────────────────────────────────────────
+    // -- Phase 3.5.5 — Fee Split Tests ----------------------------------------
 
     // Test 8: feeShareBpsLPD > 10000 reverts with InvalidFeeShare
     function test_setStandingBid_invalidFeeShare_reverts() public {
         usdc.approve(address(hook), type(uint256).max);
         vm.expectRevert(abi.encodeWithSelector(PrismHook.InvalidFeeShare.selector, 10001));
-        hook.setStandingBid(poolId, 0.5e18, 10001, 10_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 10001, 10000, 10_000e6);
 
         // 10000 is valid (LP-D takes all fees — degenerate but allowed)
-        hook.setStandingBid(poolId, 0.5e18, 10000, 10_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 10000, 10000, 10_000e6);
         assertEq(standingBidFeeShare(poolId), 10000, "10000 bps accepted");
     }
 
     // Test 9: claimFeesLPD reverts when nothing is staged (fees never claimed yet)
     function test_claimFeesLPD_beforeClaimFees_zeroBalance() public {
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, 50_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, 50_000e6);
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
 
-        // bidder holds LP-D but claimFees has never been called → nothing staged
+        // bidder holds LP-D but claimFees has never been called -> nothing staged
         vm.prank(bidder);
         vm.expectRevert(abi.encodeWithSelector(PrismHook.NoFeesClaimable.selector, posId));
         hook.claimFeesLPD(key, posId);
@@ -415,14 +415,14 @@ contract PrismHookTest is Test {
     // Test 10: phi is locked at auto-fill time; updating the bid later has no effect on existing positions
     function test_standingBid_feeShareLockedAtFill_bidUpdateNoEffect() public {
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 4000, 50_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 4000, 10000, 50_000e6);
 
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
         assertEq(hook.getPosition(posId).feeShareBpsLPD, 4000, "phi locked at auto-fill");
 
         // Replace bid with a different phi — existing position must be unaffected
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 9000, 50_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 9000, 10000, 50_000e6);
 
         assertEq(hook.getPosition(posId).feeShareBpsLPD, 4000, "bid update cannot mutate locked phi");
     }
@@ -439,7 +439,7 @@ contract PrismHookTest is Test {
         usdc.mint(buyer, 1_000_000e6);
         vm.startPrank(buyer);
         usdc.approve(address(hook), type(uint256).max);
-        hook.purchaseLPD(posId, 5_000e6, 7000); // 5000 USDC collateral, phi = 70%
+        hook.purchaseLPD(posId, 5_000e6, 7000, 10000); // 5000 USDC collateral, phi = 70%
         vm.stopPrank();
 
         PrismHook.Position memory pos = hook.getPosition(posId);
@@ -449,9 +449,9 @@ contract PrismHookTest is Test {
         assertTrue(pos.lpDSold, "lpDSold flag set");
     }
 
-    // Test 12: when LP holds both tokens (no bid), phi = 0 → claimFees would send 100% to LP-Y
+    // Test 12: when LP holds both tokens (no bid), phi = 0 -> claimFees would send 100% to LP-Y
     function test_claimFees_noLPDSold_allFeesToLPY() public {
-        // No standing bid → LP-D not sold → feeShareBpsLPD = 0
+        // No standing bid -> LP-D not sold -> feeShareBpsLPD = 0
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
         PrismHook.Position memory pos = hook.getPosition(posId);
         assertEq(pos.feeShareBpsLPD, 0, "phi must be 0 when LP holds both tokens");
@@ -471,11 +471,11 @@ contract PrismHookTest is Test {
     // Test 13: with phi=3000, LP-D share is correctly split and stored; LP-D holder receives it
     function test_claimFees_withSplit_lpYReceivesCorrectShare() public {
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, 50_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, 50_000e6);
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
         assertEq(hook.getPosition(posId).feeShareBpsLPD, 3000);
 
-        // Verify split math: 1000 units of fees, phi=30% → LP-Y 70%, LP-D 30%
+        // Verify split math: 1000 units of fees, phi=30% -> LP-Y 70%, LP-D 30%
         uint256 mockFees = 1000e18;
         uint256 phi = 3000;
         uint256 lpYShare = mockFees * (10000 - phi) / 10000;
@@ -498,7 +498,7 @@ contract PrismHookTest is Test {
     // Test 14: claimFeesLPD drains both amount0 and amount1; second call reverts NoFeesClaimable
     function test_claimFeesLPD_afterClaimFees_lpDReceivesShare() public {
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, 50_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, 50_000e6);
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
 
         uint256 staged0 = 300e18;
@@ -526,14 +526,14 @@ contract PrismHookTest is Test {
         hook.claimFeesLPD(key, posId);
     }
 
-    // ── view helpers ─────────────────────────────────────────────────────────
+    // -- view helpers ---------------------------------------------------------
 
     function lpDCollateralVault(bytes32 posId) internal view returns (uint256) {
         return hook.lpDCollateralVault(posId);
     }
 
     function standingBidFeeShare(bytes32 _poolId) internal view returns (uint256) {
-        (,, uint256 feeShare,,,) = hook.standingBids(_poolId);
+        (,, uint256 feeShare,,,,) = hook.standingBids(_poolId);
         return feeShare;
     }
 
@@ -542,12 +542,13 @@ contract PrismHookTest is Test {
     /// pack into slot 0; callbackContract at slot 1; mappings at slots 2–9).
     /// FeeShares.amount0 at keccak256(posId, 7), amount1 at that slot + 1.
     function _injectLPDFees(bytes32 posId, uint256 amount0, uint256 amount1) internal {
-        bytes32 baseSlot = keccak256(abi.encode(posId, uint256(7)));
+        // lpDFeesClaimable is at storage slot 10 (see: forge inspect PrismHook storage-layout)
+        bytes32 baseSlot = keccak256(abi.encode(posId, uint256(10)));
         vm.store(address(hook), baseSlot, bytes32(amount0));
         vm.store(address(hook), bytes32(uint256(baseSlot) + 1), bytes32(amount1));
     }
 
-    // ── Coverage tests: admin ─────────────────────────────────────────────────
+    // -- Coverage tests: admin -------------------------------------------------
 
     // Test 15: setCallbackContract reverts if already set
     function test_setCallbackContract_alreadySet_reverts() public {
@@ -571,27 +572,27 @@ contract PrismHookTest is Test {
         assertGt(lpYToken.balanceOf(address(modifyRouter), uint256(posId)), 0, "deposit succeeds after unpause");
     }
 
-    // ── Coverage tests: cancelStandingBid ────────────────────────────────────
+    // -- Coverage tests: cancelStandingBid ------------------------------------
 
-    // Test 17: cancel with no fills → full refund
+    // Test 17: cancel with no fills -> full refund
     function test_cancelStandingBid_success_fullRefund() public {
         uint256 collateral = 10_000e6;
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, collateral);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, collateral);
 
         uint256 before = usdc.balanceOf(bidder);
         vm.prank(bidder);
         hook.cancelStandingBid(poolId);
 
         assertEq(usdc.balanceOf(bidder) - before, collateral, "full collateral refunded");
-        (,,,,,bool active) = hook.standingBids(poolId);
+        (,,,,,,bool active) = hook.standingBids(poolId);
         assertFalse(active, "bid deactivated");
     }
 
     // Test 18: cancel from wrong address reverts NotBidder
     function test_cancelStandingBid_notBidder_reverts() public {
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, 10_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, 10_000e6);
 
         vm.prank(lp2);
         vm.expectRevert(abi.encodeWithSelector(PrismHook.NotBidder.selector, poolId));
@@ -603,11 +604,11 @@ contract PrismHookTest is Test {
         // Use a small maxCollateral so one deposit consumes it partially
         uint256 maxCollateral = 50_000e6;
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, maxCollateral);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, maxCollateral);
 
         _deposit(TICK_LOWER, TICK_UPPER, 1e18); // consumes some collateral
 
-        (,,,,uint256 used,) = hook.standingBids(poolId);
+        (,,,,,uint256 used,) = hook.standingBids(poolId);
         uint256 expectedRefund = maxCollateral - used;
 
         uint256 before = usdc.balanceOf(bidder);
@@ -617,13 +618,13 @@ contract PrismHookTest is Test {
         assertEq(usdc.balanceOf(bidder) - before, expectedRefund, "partial refund correct");
     }
 
-    // ── Coverage tests: setStandingBid overwrite ─────────────────────────────
+    // -- Coverage tests: setStandingBid overwrite -----------------------------
 
     // Test 20: replacing an active bid refunds the previous bidder
     function test_setStandingBid_overwrite_refundsPrevious() public {
         // First bidder sets bid
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, 10_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, 10_000e6);
 
         // Second bidder overwrites
         address bidder2 = makeAddr("bidder2");
@@ -633,25 +634,25 @@ contract PrismHookTest is Test {
 
         uint256 bidderBefore = usdc.balanceOf(bidder);
         vm.prank(bidder2);
-        hook.setStandingBid(poolId, 0.6e18, 4000, 20_000e6);
+        hook.setStandingBid(poolId, 0.6e18, 4000, 10000, 20_000e6);
 
         assertEq(usdc.balanceOf(bidder) - bidderBefore, 10_000e6, "previous bidder refunded");
-        (address activeBidder,,,,,bool active) = hook.standingBids(poolId);
+        (address activeBidder,,,,,,bool active) = hook.standingBids(poolId);
         assertEq(activeBidder, bidder2, "new bidder is active");
         assertTrue(active);
     }
 
-    // ── Coverage tests: claimLPDCollateral ───────────────────────────────────
+    // -- Coverage tests: claimLPDCollateral -----------------------------------
 
-    // Test 21: price goes up → no IL → full vault returned to LP-D holder
+    // Test 21: price goes up -> no IL -> full vault returned to LP-D holder
     function test_claimLPDCollateral_success_priceUp() public {
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, 50_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, 50_000e6);
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
         uint256 vault = lpDCollateralVault(posId);
         assertGt(vault, 0);
 
-        // Move price up → ilRaw > 0 → no IL compensation
+        // Move price up -> ilRaw > 0 -> no IL compensation
         _movePrice(false);
 
         vm.prank(bidder);
@@ -678,20 +679,20 @@ contract PrismHookTest is Test {
     // Test 23: claimLPDCollateral when lpDClaimable == 0 reverts NoClaimableCollateral
     function test_claimLPDCollateral_nothingClaimable_reverts() public {
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, 50_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, 50_000e6);
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
-        // lpDHolder = bidder, but settleLPD not called → lpDClaimable = 0
+        // lpDHolder = bidder, but settleLPD not called -> lpDClaimable = 0
         vm.prank(bidder);
         vm.expectRevert(abi.encodeWithSelector(PrismHook.NoClaimableCollateral.selector, posId));
         hook.claimLPDCollateral(posId);
     }
 
-    // ── Coverage tests: settleLPD branches ───────────────────────────────────
+    // -- Coverage tests: settleLPD branches -----------------------------------
 
     // Test 24: settle when already settled reverts PositionAlreadySettled
     function test_settleLPD_alreadySettled_reverts() public {
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, 50_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, 50_000e6);
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
 
         vm.prank(bidder);
@@ -702,7 +703,7 @@ contract PrismHookTest is Test {
         hook.settleLPD(posId);
     }
 
-    // ── Coverage tests: claimFees ─────────────────────────────────────────────
+    // -- Coverage tests: claimFees ---------------------------------------------
 
     // Test 25: claimFees from non-LP-Y holder reverts NotLPYHolder
     function test_claimFees_notLPYHolder_reverts() public {
@@ -716,7 +717,7 @@ contract PrismHookTest is Test {
     // Test 26: claimFees on settled position reverts PositionAlreadySettled
     function test_claimFees_alreadySettled_reverts() public {
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, 50_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, 50_000e6);
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
 
         // Transfer LP-Y to lp2 so lp2 can attempt claimFees after settlement
@@ -734,7 +735,7 @@ contract PrismHookTest is Test {
         hook.claimFees(key, posId);
     }
 
-    // ── Coverage tests: claimILCompensation ──────────────────────────────────
+    // -- Coverage tests: claimILCompensation ----------------------------------
 
     // Test 27: claimILCompensation when nothing staged reverts NoCompensationStaged
     function test_claimILCompensation_nothingStaged_reverts() public {
@@ -749,13 +750,13 @@ contract PrismHookTest is Test {
         hook.claimILCompensation(posId);
     }
 
-    // ── Coverage tests: purchaseLPD reverts ──────────────────────────────────
+    // -- Coverage tests: purchaseLPD reverts ----------------------------------
 
     // Test 28: purchaseLPD with zero collateral reverts CollateralInsufficient
     function test_purchaseLPD_zeroCollateral_reverts() public {
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
         vm.expectRevert(abi.encodeWithSelector(PrismHook.CollateralInsufficient.selector, 1, 0));
-        hook.purchaseLPD(posId, 0, 3000);
+        hook.purchaseLPD(posId, 0, 3000, 10000);
     }
 
     // Test 29: purchaseLPD when LP-D already sold reverts LPDAlreadySold
@@ -769,7 +770,7 @@ contract PrismHookTest is Test {
         usdc.mint(buyer, 1_000_000e6);
         vm.startPrank(buyer);
         usdc.approve(address(hook), type(uint256).max);
-        hook.purchaseLPD(posId, 5_000e6, 3000);
+        hook.purchaseLPD(posId, 5_000e6, 3000, 10000);
         vm.stopPrank();
 
         address buyer2 = makeAddr("buyer2");
@@ -777,7 +778,7 @@ contract PrismHookTest is Test {
         vm.startPrank(buyer2);
         usdc.approve(address(hook), type(uint256).max);
         vm.expectRevert(abi.encodeWithSelector(PrismHook.LPDAlreadySold.selector, posId));
-        hook.purchaseLPD(posId, 5_000e6, 3000);
+        hook.purchaseLPD(posId, 5_000e6, 3000, 10000);
         vm.stopPrank();
     }
 
@@ -791,18 +792,18 @@ contract PrismHookTest is Test {
         vm.startPrank(buyer);
         usdc.approve(address(hook), type(uint256).max);
         vm.expectRevert(abi.encodeWithSelector(PrismHook.PositionAlreadySettled.selector, posId));
-        hook.purchaseLPD(posId, 5_000e6, 3000);
+        hook.purchaseLPD(posId, 5_000e6, 3000, 10000);
         vm.stopPrank();
     }
 
-    // ── Coverage tests: beforeRemoveLiquidity ────────────────────────────────
+    // -- Coverage tests: beforeRemoveLiquidity --------------------------------
 
     // Test 31: after RSC force-settle, LP must still be able to exit the pool.
     // beforeRemoveLiquidity returns early (vault already handled); afterRemoveLiquidity cleans up.
     // This verifies the fix for the "LP permanently locked after settleLPD" bug.
     function test_beforeRemoveLiquidity_afterForcedSettle_allowsExit() public {
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.5e18, 3000, 50_000e6);
+        hook.setStandingBid(poolId, 0.5e18, 3000, 10000, 50_000e6);
         bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
 
         // Force-settle via RSC callback before LP removes liquidity
@@ -824,13 +825,13 @@ contract PrismHookTest is Test {
         assertEq(usdc.balanceOf(address(modifyRouter)), comp, "LP received full IL comp after forced settle + exit");
     }
 
-    // ── Coverage tests: bid capacity exhaustion ──────────────────────────────
+    // -- Coverage tests: bid capacity exhaustion ------------------------------
 
     // Test 32: when bid's used+new would exceed maxCollateral, the fill is silently skipped
     // even though pricePerUnit >= maxIL (adequacy check passes).
     //
     // Tick range [-9960, 9960] gives maxIL ≈ 65% so usdcForPos ≈ 65% of maxCollateral.
-    // After one fill (65% used), a second deposit would need 130% → exceeds 100% → skipped.
+    // After one fill (65% used), a second deposit would need 130% -> exceeds 100% -> skipped.
     function test_afterAddLiquidity_bidCapacityExhausted_silentSkip() public {
         // Range where maxIL > 0.5e18 (price at lower tick is <25% of entry) so
         // two fills of equal size exhaust 100 USDC capacity.
@@ -840,23 +841,23 @@ contract PrismHookTest is Test {
         // pricePerUnit must be >= maxIL (~0.505e18); 0.9e18 passes the adequacy check.
         uint256 maxCollateral = 100e6; // 100 USDC — enough for exactly 1 fill at this range
         vm.prank(bidder);
-        hook.setStandingBid(poolId, 0.9e18, 3000, maxCollateral);
+        hook.setStandingBid(poolId, 0.9e18, 3000, 10000, maxCollateral);
 
-        // First deposit: bid adequate, usedCollateral < maxCollateral → fills
+        // First deposit: bid adequate, usedCollateral < maxCollateral -> fills
         vm.roll(100);
         bytes32 posId1 = _deposit(wide_lower, wide_upper, 1e18);
         assertTrue(hook.getPosition(posId1).lpDSold, "first deposit fills bid");
         assertEq(lpDToken.balanceOf(address(modifyRouter), uint256(posId1)), 0, "LP has no LP-D");
 
         // Second deposit: pricePerUnit still >= maxIL, but usedCollateral + cost > maxCollateral
-        // → inner capacity check fails → silent skip → LP retains both tokens
+        // -> inner capacity check fails -> silent skip -> LP retains both tokens
         vm.roll(101);
         bytes32 posId2 = _deposit(wide_lower, wide_upper, 1e18);
         assertFalse(hook.getPosition(posId2).lpDSold, "second deposit silently skipped: capacity exhausted");
         assertGt(lpDToken.balanceOf(address(modifyRouter), uint256(posId2)), 0, "LP retains LP-D on skip");
     }
 
-    // ── Coverage tests: unimplemented hook stubs ──────────────────────────────
+    // -- Coverage tests: unimplemented hook stubs ------------------------------
 
     // Test 32: all disabled hook stubs revert unconditionally
     function test_hookStubs_allRevert() public {
@@ -883,5 +884,169 @@ contract PrismHookTest is Test {
 
         vm.expectRevert();
         hook.afterDonate(address(0), key, 0, 0, "");
+    }
+
+    // -- Tier 1 ilCoverageBps tests --------------------------------------------
+
+    // Test 34: 70% coverage bid -> LP-Y comp = exactly 70% of IL
+    function test_standingBid_partialCoverage_settlesCorrectFraction() public {
+        uint256 maxCollateral = 50_000e6;
+        vm.prank(bidder);
+        hook.setStandingBid(poolId, WAD, 0, 7000, maxCollateral);
+
+        bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
+        assertTrue(hook.getPosition(posId).lpDSold, "bid should fill");
+        assertEq(hook.getPosition(posId).ilCoverageBps, 7000, "ilCoverageBps frozen");
+
+        uint256 vault = hook.lpDCollateralVault(posId);
+        assertGt(vault, 0, "vault non-zero");
+
+        _movePrice(true);   // move price to create IL
+        _remove(posId, TICK_LOWER, TICK_UPPER, 1e18);
+
+        PrismHook.Position memory pos = hook.getPosition(posId);
+        uint160 sqrtEntry   = pos.entrySqrtPrice;
+        (uint160 sqrtCurrent,,,) = StateLibrary.getSlot0(poolManager, key.toId());
+        int256 ilRaw = ILMath._computeIL(sqrtEntry, sqrtCurrent, uint128(1e18));
+
+        if (ilRaw < 0) {
+            // Vault was sized at fill to coveredIL = maxIL × 70%, so the proportional
+            // settlement draw comp = vault × ilAbs / maxIL pays exactly the covered
+            // fraction of realized IL. Cap at vault when IL reaches/exceeds maxIL.
+            uint256 ilAbs        = uint256(-ilRaw);
+            uint256 expectedComp = ilAbs >= pos.maxIL ? vault : (vault * ilAbs) / pos.maxIL;
+            assertGt(pos.maxIL, 0, "maxIL stored at fill");
+            assertEq(hook.lpYCompensation(posId), expectedComp, "comp = proportional vault draw");
+            assertLe(hook.lpYCompensation(posId), vault, "comp never exceeds vault");
+        } else {
+            assertEq(hook.lpYCompensation(posId), 0, "no IL, no comp");
+        }
+    }
+
+    // Test 35: 70% coverage bid locks less USDC per fill than 100% coverage
+    function test_standingBid_partialCoverage_locksLessUSDC() public {
+        uint256 maxCollateral = 50_000e6;
+
+        // 70% coverage bid
+        vm.prank(bidder);
+        hook.setStandingBid(poolId, WAD, 0, 7000, maxCollateral);
+        vm.roll(100);
+        bytes32 posId70 = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
+        uint256 vault70 = hook.lpDCollateralVault(posId70);
+
+        // cancel and replace with 100% coverage bid
+        vm.prank(bidder);
+        hook.cancelStandingBid(poolId);
+        vm.prank(bidder);
+        hook.setStandingBid(poolId, WAD, 0, 10000, maxCollateral);
+        vm.roll(101);
+        bytes32 posId100 = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
+        uint256 vault100 = hook.lpDCollateralVault(posId100);
+
+        assertGt(vault70,  0,      "70% bid locks some USDC");
+        assertGt(vault100, vault70, "100% bid locks more USDC than 70%");
+    }
+
+    // Test 36: ilCoverageBps > 10000 reverts InvalidCoverageBps
+    function test_ilCoverageBps_above10000_reverts() public {
+        vm.prank(bidder);
+        vm.expectRevert(abi.encodeWithSelector(PrismHook.InvalidCoverageBps.selector, 10001));
+        hook.setStandingBid(poolId, WAD, 0, 10001, 10_000e6);
+    }
+
+    // Test 37: ilCoverageBps == 0 reverts InvalidCoverageBps
+    function test_ilCoverageBps_zero_reverts() public {
+        vm.prank(bidder);
+        vm.expectRevert(abi.encodeWithSelector(PrismHook.InvalidCoverageBps.selector, 0));
+        hook.setStandingBid(poolId, WAD, 0, 0, 10_000e6);
+    }
+
+    // -- Tier-2 order book tests -----------------------------------------------
+
+    // Test 38: highest-scoring bid wins when two bids exist
+    function test_orderBook_bestScoredBidWins() public {
+        // bid A: 80% coverage, 20% fee share -> score = 8000 * 8000 / 10000 = 6400
+        vm.prank(bidder);
+        uint256 bidIdA = hook.postBid(poolId, WAD, 2000, 8000, 50_000e6);
+
+        // bid B: 90% coverage, 10% fee share -> score = 9000 * 9000 / 10000 = 8100
+        address bidder2 = makeAddr("bidder2");
+        usdc.mint(bidder2, 1_000_000e6);
+        vm.prank(bidder2);
+        usdc.approve(address(hook), type(uint256).max);
+        vm.prank(bidder2);
+        uint256 bidIdB = hook.postBid(poolId, WAD, 1000, 9000, 50_000e6);
+
+        vm.roll(block.number + 1);
+        bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
+
+        PrismHook.Position memory pos = hook.getPosition(posId);
+        assertTrue(pos.lpDSold, "bid must fill");
+        assertEq(pos.ilCoverageBps, 9000, "highest-score (bid B, 90%) must win");
+        assertEq(pos.lpDHolder, bidder2, "LP-D holder is bid B winner");
+        assertEq(hook.filledBidId(posId), bidIdB, "filledBidId records winning bid");
+        assertEq(bidIdA, 0);
+        assertEq(bidIdB, 1);
+    }
+
+    // Test 39: cancelling one bid leaves the other active
+    function test_orderBook_twoBidsRemainIndependent() public {
+        vm.prank(bidder);
+        uint256 bidIdA = hook.postBid(poolId, WAD, 2000, 8000, 50_000e6);
+
+        address bidder2 = makeAddr("bidder2b");
+        usdc.mint(bidder2, 1_000_000e6);
+        vm.prank(bidder2);
+        usdc.approve(address(hook), type(uint256).max);
+        vm.prank(bidder2);
+        uint256 bidIdB = hook.postBid(poolId, WAD, 1000, 9000, 50_000e6);
+
+        // cancel bid A; bid B must stay active
+        uint256 balBefore = usdc.balanceOf(bidder);
+        vm.prank(bidder);
+        hook.cancelBid(poolId, bidIdA);
+
+        (,,,,,,bool activeA) = hook.bids(poolId, bidIdA);
+        (,,,,,,bool activeB) = hook.bids(poolId, bidIdB);
+        assertFalse(activeA, "cancelled bid A is inactive");
+        assertTrue(activeB,  "bid B still active after A cancelled");
+        assertEq(usdc.balanceOf(bidder) - balBefore, 50_000e6, "full refund on cancel");
+    }
+
+    // Test 40: 21st postBid reverts MaxBidsReached
+    function test_orderBook_maxBidsReached_reverts() public {
+        address bidder3 = makeAddr("bidder3");
+        usdc.mint(bidder3, 100_000_000e6);
+        vm.prank(bidder3);
+        usdc.approve(address(hook), type(uint256).max);
+
+        for (uint256 i = 0; i < hook.MAX_BIDS_PER_POOL(); i++) {
+            vm.prank(bidder3);
+            hook.postBid(poolId, WAD, 0, 10000, 1000e6);
+        }
+
+        vm.prank(bidder3);
+        vm.expectRevert(abi.encodeWithSelector(PrismHook.MaxBidsReached.selector, poolId, hook.MAX_BIDS_PER_POOL()));
+        hook.postBid(poolId, WAD, 0, 10000, 1000e6);
+    }
+
+    // Test 41: filledBidId records the correct winning bid index
+    function test_orderBook_filledBidId_recordedCorrectly() public {
+        // post two bids; second one (bidId=1) is higher scored
+        vm.prank(bidder);
+        hook.postBid(poolId, WAD, 3000, 7000, 50_000e6);  // score 7000*7000/10000=4900
+
+        address bidder2 = makeAddr("bidder2c");
+        usdc.mint(bidder2, 1_000_000e6);
+        vm.prank(bidder2);
+        usdc.approve(address(hook), type(uint256).max);
+        vm.prank(bidder2);
+        hook.postBid(poolId, WAD, 500, 9500, 50_000e6);  // score 9500*9500/10000=9025
+
+        vm.roll(block.number + 1);
+        bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
+
+        assertEq(hook.filledBidId(posId), 1, "bid at index 1 (higher score) wins");
+        assertEq(hook.getPosition(posId).ilCoverageBps, 9500, "95% coverage frozen");
     }
 }

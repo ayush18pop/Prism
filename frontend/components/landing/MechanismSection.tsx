@@ -21,21 +21,23 @@ export function MechanismSection() {
 
         {/* The hook callback as the visual anchor */}
         <div style={{ marginBottom: 64 }}>
+          <div className="spectrum-bar" style={{ marginBottom: 20, maxWidth: 80 }} />
           <p style={{
             fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)',
             fontSize: 11, letterSpacing: '0.12em',
             color: 'var(--text-tertiary)', marginBottom: 20,
           }}>
-            function afterAddLiquidity(...)
+            afterAddLiquidity  ·  the hook callback that runs at deposit time
           </p>
           <h2 style={{
-            fontSize: 'clamp(28px, 4vw, 48px)', fontWeight: 500,
-            lineHeight: 1.15, letterSpacing: '-0.03em',
-            color: 'var(--text-primary)', maxWidth: 600,
+            fontFamily: 'var(--font-display, serif)',
+            fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 400,
+            lineHeight: 1.15, letterSpacing: '-0.02em',
+            color: 'var(--text-primary)', maxWidth: 680,
           }}>
-            The LP deposits once.<br />
-            <span style={{ color: 'var(--text-tertiary)' }}>
-              The hook splits the position, matches the bid, locks collateral. All in the same block.
+            One deposit, one transaction.<br />
+            <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+              The hook scores every active bid, selects the best match, locks collateral, and settles the split. All in the same block.
             </span>
           </h2>
         </div>
@@ -60,7 +62,8 @@ export function MechanismSection() {
           {[
             { n: '01', text: 'posId = keccak256(poolId ‖ lp ‖ ticks ‖ block.number)' },
             { n: '02', text: 'mint LP-Y  →  lp', color: 'var(--lpy-base)' },
-            { n: '03', text: 'standingBids[poolId].pricePerUnit ≥ maxIL ?' },
+            { n: '03', text: 'for each active bid: score = ilCoverageBps * (10000 - feeShareBpsLPD) / 10000', color: 'var(--text-tertiary)' },
+            { n: '04', text: 'best = bid with highest score where collateral covers maxIL' },
           ].map(({ n, text, color }) => (
             <div key={n} style={{ display: 'flex', gap: 20, marginBottom: 10, fontSize: 12, lineHeight: 1.6 }}>
               <span style={{ color: 'var(--text-tertiary)', minWidth: 20 }}>{n}</span>
@@ -76,14 +79,15 @@ export function MechanismSection() {
               background: 'var(--lpy-muted)',
             }}>
               <div style={{ fontSize: 10, color: 'var(--lpy-base)', letterSpacing: '0.1em', marginBottom: 10 }}>
-                ├─ YES, bid fills
+                ├─ YES, best bid fills
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 2 }}>
-                <div>LP-D  →  protocol wallet</div>
-                <div style={{ color: 'var(--vault-base)' }}>vault  ←  bid.collateral (USDC)</div>
+                <div>LP-D  →  winning protocol wallet</div>
+                <div style={{ color: 'var(--vault-base)' }}>vault  ←  USDC  (bid.ilCoverageBps fraction of maxIL)</div>
+                <div style={{ color: 'var(--lpy-base)' }}>pos.ilCoverageBps  =  bid.ilCoverageBps  (frozen)</div>
               </div>
               <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 8 }}>
-                LP exits with zero IL exposure
+                LP exits with chosen coverage level, zero IL up to that fraction
               </div>
             </div>
             <div style={{
@@ -92,21 +96,21 @@ export function MechanismSection() {
               background: 'var(--bg-raised)',
             }}>
               <div style={{ fontSize: 10, color: 'var(--text-tertiary)', letterSpacing: '0.1em', marginBottom: 10 }}>
-                └─ NO, no match
+                └─ NO, no adequate bid
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 2 }}>
                 <div>LP-D  →  lp (held)</div>
                 <div style={{ color: 'var(--text-tertiary)' }}>no vault, no collateral locked</div>
               </div>
               <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 8 }}>
-                LP self-insures or sells LP-D later
+                deposit never reverts, LP retains both tokens
               </div>
             </div>
           </div>
 
           {/* Final emit */}
           <div style={{ display: 'flex', gap: 20, fontSize: 12, lineHeight: 1.6 }}>
-            <span style={{ color: 'var(--text-tertiary)', minWidth: 20 }}>04</span>
+            <span style={{ color: 'var(--text-tertiary)', minWidth: 20 }}>05</span>
             <span style={{ color: 'var(--text-tertiary)' }}>
               emit PositionOpened(posId, sqrtPrice, tickLower, tickUpper, collateral)
             </span>
@@ -117,7 +121,7 @@ export function MechanismSection() {
         <div style={{
           padding: '32px 36px',
           border: '1px solid var(--border-default)',
-          borderLeft: '3px solid var(--vault-base)',
+          borderTop: '2px solid var(--vault-base)',
         }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40 }}>
             <div>
@@ -126,25 +130,26 @@ export function MechanismSection() {
                 fontSize: 11, color: 'var(--vault-base)', letterSpacing: '0.1em',
                 marginBottom: 12,
               }}>
-                standingBids[poolId]
+                bids[poolId]  ·  the on-chain order book
               </p>
               <p style={{
                 fontSize: 18, fontWeight: 500, color: 'var(--text-primary)',
                 letterSpacing: '-0.02em', lineHeight: 1.3, marginBottom: 12,
               }}>
-                The protocol pre-funds once.<br />
-                Every deposit fills atomically.
+                Protocols post bids.<br />
+                The best one fills each deposit.
               </p>
               <p style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
-                A protocol puts USDC in once. Every LP that deposits after that gets
-                matched automatically. No keepers, no per-deposit approvals,
-                no separate settlement step. It fills or it doesn&apos;t, right at deposit time.
+                Any protocol can post a bid with their coverage terms and USDC collateral.
+                Multiple bids compete. Each deposit automatically matches the highest-scoring
+                bid that has enough collateral to cover the position&apos;s maxIL.
+                No keepers, no per-deposit approvals, no separate settlement step.
               </p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {[
-                { field: 'pricePerUnit', desc: 'IL fraction the protocol commits to cover. Must exceed the position\'s maxIL, otherwise the bid gets skipped quietly.' },
-                { field: 'feeShareBpsLPD', desc: 'Basis points of swap fees routed to LP-D holder per trade. LP-Y earns the remainder.' },
+                { field: 'ilCoverageBps', desc: 'Fraction of IL this bid commits to cover, in basis points. 10000 = 100%. Frozen into the position at fill time.' },
+                { field: 'feeShareBpsLPD', desc: 'Basis points of swap fees routed to LP-D holder. LP-Y earns the remainder. Lower demand = higher score.' },
                 { field: 'maxCollateral', desc: 'Total USDC budget. Allocated proportionally across matched deposits until exhausted.' },
               ].map(({ field, desc }) => (
                 <div key={field}>

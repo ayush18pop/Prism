@@ -135,4 +135,13 @@ contract Deploy is Script {
         }
         console.log("\nUpdate deployments/unichain-sepolia.json with the above.");
     }
+
+    /// @notice Deploy only PrismRouter (after fixing IPrismHookMinimal struct).
+    function deployRouter() external {
+        address pmAddr = vm.envAddress("POOL_MANAGER_ADDRESS");
+        vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
+        PrismRouter router = new PrismRouter(IPoolManager(pmAddr));
+        console.log("PrismRouter:", address(router));
+        vm.stopBroadcast();
+    }
 }

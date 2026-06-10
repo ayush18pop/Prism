@@ -11,7 +11,10 @@ import { TransferPanel } from '@/components/position/TransferPanel'
 import { useStandingBid } from '@/hooks/useStandingBid'
 import { usePositionList } from '@/hooks/usePositionList'
 import { usePositionData } from '@/hooks/usePositionData'
+import { usePendingFees } from '@/hooks/usePendingFees'
+import { poolKeyForPoolId } from '@/hooks/usePoolInitialized'
 import { usePoolPrice } from '@/hooks/usePoolPrice'
+import { BidList } from '@/components/market/BidList'
 
 export default function ProvidePage() {
   const { address, isConnected } = useAccount()
@@ -24,6 +27,7 @@ export default function ProvidePage() {
     <div>
       {/* Page header */}
       <div style={{ marginBottom: 24 }}>
+        <div className="spectrum-bar" style={{ marginBottom: 16, maxWidth: 64 }} />
         <p className="text-label" style={{ color: 'var(--text-tertiary)', marginBottom: 4 }}>LP PROVIDER</p>
         <h1 className="text-display" style={{ color: 'var(--text-primary)' }}>Provide</h1>
       </div>
@@ -45,6 +49,9 @@ export default function ProvidePage() {
           ) : (
             <BidStatusBanner status="none" />
           )}
+
+          {/* Order book — all active bids */}
+          <BidList poolId={ADDRESSES.poolId} connectedAddress={address} />
 
           {/* Deposit form */}
           <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', padding: 24 }}>
@@ -167,6 +174,7 @@ function PositionCardRedesigned({
   showOnlySettled?: boolean
 }) {
   const pos = usePositionData(posId, account, sqrtPriceX96, tick)
+  const pending = usePendingFees(pos.poolId, pos.tickLower ?? 0, pos.tickUpper ?? 0)
 
   if (!pos.exists || pos.isLoading) return (
     <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', padding: 20 }}>
@@ -175,14 +183,22 @@ function PositionCardRedesigned({
     </div>
   )
 
-  // Filter by settled state
-  if (hideIfSettled && pos.settled) return null
-  if (showOnlySettled && !pos.settled) return null
-
   const { tickLower, tickUpper, inRange, settled, lpDSold, liquidity,
           collateralVault, collateralVaultRaw, ilCompensationRaw = 0n, ilCompensation,
           currentIL, currentILIsNegative, positionValueUSD,
           lpyBalance, lpdBalance, hasLPY, hasLPD, lpDHolder, lpdFees } = pos
+
+  // LP-Y receives (10000 − φ)/10000 of pending fees; the rest goes to LP-D
+  const phi = BigInt(pos.feeShareBpsLPD ?? 0)
+  const pendingFees = {
+    lpY0: (pending.pending0 * (10000n - phi)) / 10000n,
+    lpY1: (pending.pending1 * (10000n - phi)) / 10000n,
+    legacy: !pending.isLoading && pending.managerLiquidity === 0n && (liquidity ?? 0n) > 0n,
+  }
+
+  // Filter by settled state — keep visible if settled but still has unclaimed IL compensation
+  if (hideIfSettled && settled && ilCompensationRaw === 0n) return null
+  if (showOnlySettled && !settled) return null
 
   const lpyPct = lpDSold ? 100 : 50
   const lpdPct = lpDSold ? 0 : 50
@@ -255,9 +271,12 @@ function PositionCardRedesigned({
           ilComp={ilCompensationRaw}
           lpdClaimable={0n}
           lpDFees={lpdFees ? { amount0: lpdFees[0], amount1: lpdFees[1] } : { amount0: 0n, amount1: 0n }}
+          pendingFees={pendingFees}
+          poolKey={poolKeyForPoolId(pos.poolId)}
           settled={settled ?? false}
           lpDHolder={lpDHolder ?? '0x0000000000000000000000000000000000000000'}
           account={account}
+          hasLPY={hasLPY ?? false}
           tickLower={tickLower ?? 0}
           tickUpper={tickUpper ?? 0}
           liquidity={(liquidity ?? 0n) as bigint}

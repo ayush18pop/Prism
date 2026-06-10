@@ -51,18 +51,29 @@ export function useLPDClaimable(posId: `0x${string}` | undefined) {
 }
 
 export function useStandingBid(poolId: `0x${string}` | undefined) {
-  return useReadContract({
+  // Reads the most recently posted bid (nextBidId - 1). Callers check .active.
+  const { data: nextId } = useReadContract({
     address: ADDRESSES.PrismHook,
     abi: PRISM_HOOK_ABI,
-    functionName: 'standingBids',
+    functionName: 'nextBidId',
     args: poolId ? [poolId] : undefined,
     chainId: 1301,
     query: { enabled: !!poolId && !!ADDRESSES.PrismHook },
   })
+  const bidId = nextId != null && (nextId as bigint) > 0n ? (nextId as bigint) - 1n : undefined
+  const result = useReadContract({
+    address: ADDRESSES.PrismHook,
+    abi: PRISM_HOOK_ABI,
+    functionName: 'bids',
+    args: poolId && bidId != null ? [poolId, bidId] : undefined,
+    chainId: 1301,
+    query: { enabled: !!poolId && bidId != null && !!ADDRESSES.PrismHook },
+  })
+  return { ...result, bidId }
 }
 
 const POSITION_OPENED_EVENT = parseAbiItem(
-  'event PositionOpened(bytes32 indexed posId, uint160 entrySqrtPrice, int24 tickLower, int24 tickUpper, uint256 collateral)'
+  'event PositionOpened(bytes32 indexed posId, uint160 entrySqrtPrice, int24 tickLower, int24 tickUpper, uint256 ilCoverageBps, uint256 collateral)'
 )
 
 const CHUNK_SIZE = 5000n
@@ -85,7 +96,6 @@ export function usePositionLogs() {
         })
         allLogs.push(...chunk)
       }
-      console.log('[usePositionLogs] found', allLogs.length, 'events across', String((currentBlock - ADDRESSES.deployBlock) / CHUNK_SIZE + 1n), 'chunks')
       return allLogs
     },
     enabled: !!client && !!ADDRESSES.PrismHook,

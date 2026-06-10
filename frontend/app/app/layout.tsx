@@ -1,9 +1,11 @@
 import { TabNav } from '@/components/layout/TabNav'
+import { NetworkGuard } from '@/components/layout/NetworkGuard'
 import { Toaster } from 'sonner'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-base)' }}>
+      <NetworkGuard />
       <TabNav />
       <Toaster
         theme="dark"
@@ -26,7 +28,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           },
         }}
       />
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
+      <main suppressHydrationWarning style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
         {children}
       </main>
     </div>

@@ -3,10 +3,10 @@
 import { useState } from 'react'
 import { parseUnits, formatUnits } from 'viem'
 import { useWriteContract, usePublicClient, useAccount, useReadContract } from 'wagmi'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ADDRESSES } from '@/lib/addresses'
 import { PRISM_HOOK_ABI, ERC20_ABI } from '@/lib/abis'
-import { useStandingBid } from '@/hooks/usePrismHook'
 import { SectionLabel } from '@/components/ui/index'
 
 const BLOCKSCOUT = 'https://unichain-sepolia.blockscout.com/tx/'
@@ -18,7 +18,7 @@ interface StandingBidFormProps {
 export function StandingBidForm({ poolId }: StandingBidFormProps) {
   const { address } = useAccount()
   const client      = usePublicClient({ chainId: 1301 })
-  const { data: bid, refetch } = useStandingBid(poolId)
+  const queryClient = useQueryClient()
 
   const { data: usdcBal } = useReadContract({
     address: ADDRESSES.USDC,
@@ -33,7 +33,7 @@ export function StandingBidForm({ poolId }: StandingBidFormProps) {
   const [feeSharePct, setFeeSharePct] = useState('30')
   const [maxUsdc,     setMaxUsdc]     = useState('10000')
   const [error,       setError]       = useState('')
-  const [step, setStep] = useState<'idle' | 'approving' | 'setting' | 'done'>('idle')
+  const [step,        setStep]        = useState<'idle' | 'approving' | 'setting'>('idle')
 
   const { writeContractAsync: write } = useWriteContract()
 
@@ -53,41 +53,23 @@ export function StandingBidForm({ poolId }: StandingBidFormProps) {
       if (approveReceipt.status === 'reverted') throw new Error('Approve reverted on-chain')
 
       setStep('setting')
-      const pricePerUnit = BigInt(Math.floor(parseFloat(coverage) * 1e18))
-      const feeShareBps  = BigInt(Math.min(10000, Math.round(parseFloat(feeSharePct) * 100)))
-      const setBidTx     = await write({ address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'setStandingBid', args: [poolId, pricePerUnit, feeShareBps, usdcAmount], chainId: 1301 })
-      const setBidReceipt = await client.waitForTransactionReceipt({ hash: setBidTx })
-      if (setBidReceipt.status === 'reverted') throw new Error('setStandingBid reverted on-chain')
-      setStep('done')
-      refetch()
-      toast.success('Standing bid set', {
-        description: `${coverage} coverage · ${maxUsdc} USDC budget`,
-        action: { label: 'View ↗', onClick: () => window.open(BLOCKSCOUT + setBidTx, '_blank') },
+      const pricePerUnit  = BigInt(Math.floor(parseFloat(coverage) * 1e18))
+      const feeShareBps   = BigInt(Math.min(10000, Math.round(parseFloat(feeSharePct) * 100)))
+      const ilCoverageBps = BigInt(Math.min(10000, Math.round(parseFloat(coverage) * 10000)))
+      const postTx = await write({ address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'postBid', args: [poolId, pricePerUnit, feeShareBps, ilCoverageBps, usdcAmount], chainId: 1301 })
+      const postReceipt = await client.waitForTransactionReceipt({ hash: postTx })
+      if (postReceipt.status === 'reverted') throw new Error('postBid reverted on-chain')
+      setStep('idle')
+      queryClient.invalidateQueries({ queryKey: ['bid', ADDRESSES.PrismHook, poolId] })
+      toast.success('Bid posted', {
+        description: `${(parseFloat(coverage) * 100).toFixed(0)}% IL coverage · ${maxUsdc} USDC budget`,
+        action: { label: 'View ↗', onClick: () => window.open(BLOCKSCOUT + postTx, '_blank') },
       })
     } catch (e: unknown) {
       const msg = (e as { shortMessage?: string; message: string }).shortMessage ?? (e as Error).message
       setError(msg)
       toast.error('Failed to set bid', { description: msg.slice(0, 120) })
       setStep('idle')
-    }
-  }
-
-  async function cancel() {
-    if (!poolId || !ADDRESSES.PrismHook) return
-    if (!client) { setError('No RPC client, check chain connection'); return }
-    setError('')
-    try {
-      const tx = await write({ address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'cancelStandingBid', args: [poolId], chainId: 1301 })
-      const cancelReceipt = await client.waitForTransactionReceipt({ hash: tx })
-      if (cancelReceipt.status === 'reverted') throw new Error('cancelStandingBid reverted on-chain')
-      refetch()
-      toast.success('Standing bid cancelled — USDC refunded', {
-        action: { label: 'View tx ↗', onClick: () => window.open(BLOCKSCOUT + tx, '_blank') },
-      })
-    } catch (e: unknown) {
-      const msg = (e as { shortMessage?: string; message: string }).shortMessage ?? (e as Error).message
-      setError(msg)
-      toast.error('Cancel failed', { description: msg.slice(0, 120) })
     }
   }
 
@@ -98,9 +80,8 @@ export function StandingBidForm({ poolId }: StandingBidFormProps) {
   const isLoading    = step === 'approving' || step === 'setting'
 
   const btnLabel = step === 'approving' ? 'Approving USDC…'
-                 : step === 'setting'   ? 'Setting bid…'
-                 : step === 'done'      ? 'Bid Active'
-                 : `Set Standing Bid · ${maxUsdcNum.toLocaleString()} USDC`
+                 : step === 'setting'   ? 'Posting bid…'
+                 : `Post Bid · ${maxUsdcNum.toLocaleString()} USDC`
 
   if (!ADDRESSES.PrismHook) {
     return (
@@ -210,39 +191,22 @@ export function StandingBidForm({ poolId }: StandingBidFormProps) {
         </div>
       )}
 
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button
-          onClick={submit}
-          disabled={isLoading || step === 'done' || !ADDRESSES.PrismHook || !ADDRESSES.USDC || feeInvalid}
-          style={{
-            flex: 1, padding: '12px',
-            background: (!isLoading && step !== 'done' && !feeInvalid) ? 'var(--text-primary)' : 'var(--bg-raised)',
-            border: '1px solid var(--border-default)',
-            color: (!isLoading && step !== 'done' && !feeInvalid) ? 'var(--bg-base)' : 'var(--text-tertiary)',
-            fontSize: 13, fontWeight: 500,
-            cursor: (isLoading || step === 'done' || feeInvalid) ? 'not-allowed' : 'pointer',
-            transition: 'background 150ms, color 150ms',
-          }}
-        >
-          {isLoading ? btnLabel : step === 'done' ? 'Bid Active ✓' : `Set Standing Bid · ${maxUsdcNum.toLocaleString()} USDC`}
-        </button>
-        {bid?.active && (
-          <button
-            onClick={cancel}
-            style={{
-              padding: '12px 16px', background: 'none',
-              border: '1px solid var(--border-default)',
-              color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer',
-              transition: 'border-color 150ms, color 150ms',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(220,38,38,0.4)'; (e.currentTarget as HTMLElement).style.color = 'var(--negative)' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-default)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)' }}
-          >
-            Cancel
-          </button>
-        )}
-      </div>
+      {/* Action button */}
+      <button
+        onClick={submit}
+        disabled={isLoading || !ADDRESSES.PrismHook || !ADDRESSES.USDC || feeInvalid}
+        style={{
+          width: '100%', padding: '12px',
+          background: (!isLoading && !feeInvalid) ? 'var(--text-primary)' : 'var(--bg-raised)',
+          border: '1px solid var(--border-default)',
+          color: (!isLoading && !feeInvalid) ? 'var(--bg-base)' : 'var(--text-tertiary)',
+          fontSize: 13, fontWeight: 500,
+          cursor: (isLoading || feeInvalid) ? 'not-allowed' : 'pointer',
+          transition: 'background 150ms, color 150ms',
+        }}
+      >
+        {btnLabel}
+      </button>
     </div>
   )
 }

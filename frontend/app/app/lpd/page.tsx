@@ -1,20 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { useAccount, useWriteContract, usePublicClient } from 'wagmi'
+import { useAccount } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { toast } from 'sonner'
 import { ADDRESSES } from '@/lib/addresses'
-import { PRISM_HOOK_ABI } from '@/lib/abis'
 import { SectionLabel, StatusBadge, TokenPill, AddressChip } from '@/components/ui/index'
 import { StandingBidForm } from '@/components/lpd/StandingBidForm'
-import { useStandingBid } from '@/hooks/useStandingBid'
+import { MyBids } from '@/components/lpd/MyBids'
 import { usePositionList } from '@/hooks/usePositionList'
 import { usePositionData } from '@/hooks/usePositionData'
 import { usePoolPrice } from '@/hooks/usePoolPrice'
 import { usePoolInitialized, computePoolId } from '@/hooks/usePoolInitialized'
 
-// All pools for this hook × fee tier combination
+// All pools for this hook × fee tier combination (USDC/PRISM)
 const POOL_CONFIGS = (() => {
   const u = ADDRESSES.USDC as `0x${string}`
   const p = ADDRESSES.PRISM as `0x${string}`
@@ -33,47 +31,17 @@ export default function LpdPage() {
   const { sqrtPriceX96, tick } = usePoolPrice()
   const { positions } = usePositionList(address)
   const isCorrectNetwork = chainId === 1301
-  const [cancelConfirm, setCancelConfirm] = useState(false)
-  const [cancelLoading, setCancelLoading] = useState(false)
   const [selectedPoolIdx, setSelectedPoolIdx] = useState(1) // default: 0.05%
-  const { writeContractAsync } = useWriteContract()
-  const client = usePublicClient({ chainId: 1301 })
-
-  async function handleCancel() {
-    if (!selectedPool?.poolId || !ADDRESSES.PrismHook) return
-    if (!client) { toast.error('No RPC client, check chain connection'); return }
-    setCancelLoading(true)
-    try {
-      const tx = await writeContractAsync({
-        address: ADDRESSES.PrismHook,
-        abi: PRISM_HOOK_ABI,
-        functionName: 'cancelStandingBid',
-        args: [selectedPool.poolId],
-        chainId: 1301,
-      })
-      const receipt = await client.waitForTransactionReceipt({ hash: tx })
-      if (receipt.status === 'reverted') throw new Error('Transaction reverted on-chain')
-      toast.success('Standing bid cancelled — USDC refunded', {
-        action: { label: 'View tx ↗', onClick: () => window.open('https://unichain-sepolia.blockscout.com/tx/' + tx, '_blank') },
-      })
-      setCancelConfirm(false)
-    } catch (e: unknown) {
-      const msg = (e as { shortMessage?: string; message: string }).shortMessage ?? (e as Error).message
-      toast.error('Cancel failed', { description: msg.slice(0, 120) })
-    } finally {
-      setCancelLoading(false)
-    }
-  }
 
   const selectedPool = POOL_CONFIGS[selectedPoolIdx]
   const poolStatus = usePoolInitialized(selectedPool?.poolId)
-  const bid = useStandingBid(selectedPool?.poolId)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
 
       {/* ── Section 1: Page header ─────────────────────────── */}
       <div>
+        <div className="spectrum-bar" style={{ marginBottom: 16, maxWidth: 64 }} />
         <p className="text-label" style={{ color: 'var(--text-tertiary)', marginBottom: 4 }}>LP-D BUYER</p>
         <h1 className="text-display" style={{ color: 'var(--text-primary)', marginBottom: 8 }}>Coverage</h1>
         <p className="text-body" style={{ color: 'var(--text-secondary)', maxWidth: 520 }}>
@@ -217,107 +185,17 @@ export default function LpdPage() {
             This pool has not been created yet. Switch to an initialized pool, or deploy and initialize this fee tier first.
           </p>
         </div>
-      ) : bid.active ? (
-        /* Active bid card */
-        <div style={{ border: '1px solid rgba(22,163,74,0.3)', background: 'var(--positive-muted)' }}>
-          {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid rgba(22,163,74,0.2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div className="text-label" style={{ color: 'var(--text-tertiary)' }}>ACTIVE BID</div>
-              <StatusBadge status="filled" />
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div style={{ display: 'flex', gap: 32, padding: '20px 24px', borderBottom: '1px solid rgba(22,163,74,0.2)' }}>
-            <div>
-              <div className="text-label" style={{ color: 'var(--text-tertiary)', marginBottom: 4 }}>COVERAGE</div>
-              <div className="text-mono-md" style={{ color: 'var(--positive)' }}>{bid.coveragePercent}</div>
-            </div>
-            <div>
-              <div className="text-label" style={{ color: 'var(--text-tertiary)', marginBottom: 4 }}>FEE SHARE</div>
-              <div className="text-mono-md" style={{ color: 'var(--positive)' }}>{bid.feeSharePercent}</div>
-            </div>
-            <div>
-              <div className="text-label" style={{ color: 'var(--text-tertiary)', marginBottom: 4 }}>DEPOSITED</div>
-              <div className="text-mono-md" style={{ color: 'var(--positive)' }}>{bid.maxCollateral}</div>
-            </div>
-          </div>
-
-          {/* Progress bar */}
-          <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(22,163,74,0.2)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="text-small" style={{ color: 'var(--text-secondary)' }}>
-                Used {bid.usedCollateral} / {bid.maxCollateral}
-              </span>
-              <span className="text-mono-sm" style={{ color: 'var(--text-secondary)' }}>
-                {bid.utilizationPercent.toFixed(1)}%
-              </span>
-            </div>
-            <div style={{ height: 6, background: 'var(--bg-raised)', borderRadius: 100, overflow: 'hidden' }}>
-              <div style={{
-                height: '100%', width: `${bid.utilizationPercent}%`,
-                background: 'var(--vault-base)', borderRadius: 100,
-                transition: 'width 500ms ease',
-              }} />
-            </div>
-            <p className="text-small" style={{ color: 'var(--text-secondary)', marginTop: 6 }}>
-              Remaining: {bid.remainingCollateral} available for new deposits
-            </p>
-          </div>
-
-          {/* Cancel */}
-          <div style={{ padding: '16px 24px' }}>
-            {cancelConfirm ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span className="text-small" style={{ color: 'var(--text-secondary)' }}>
-                  Reclaim {bid.remainingCollateral} USDC. This will cancel the bid.
-                </span>
-                <button
-                  onClick={() => setCancelConfirm(false)}
-                  style={{
-                    padding: '6px 14px', background: 'none',
-                    border: '1px solid var(--border-default)', color: 'var(--text-secondary)',
-                    fontSize: 12, cursor: 'pointer',
-                  }}
-                >
-                  Keep bid
-                </button>
-                <button
-                  onClick={handleCancel}
-                  disabled={cancelLoading}
-                  style={{
-                    padding: '6px 14px', background: 'none',
-                    border: '1px solid rgba(220,38,38,0.4)', color: 'var(--negative)',
-                    fontSize: 12, cursor: cancelLoading ? 'not-allowed' : 'pointer',
-                    opacity: cancelLoading ? 0.5 : 1,
-                  }}
-                >
-                  {cancelLoading ? '…' : 'Confirm cancel'}
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setCancelConfirm(true)}
-                style={{
-                  padding: '8px 18px', background: 'none',
-                  border: '1px solid var(--border-default)',
-                  color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer',
-                  transition: 'border-color 150ms, color 150ms',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(220,38,38,0.4)'; (e.currentTarget as HTMLElement).style.color = 'var(--negative)' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-default)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)' }}
-              >
-                Cancel bid · reclaim {bid.remainingCollateral}
-              </button>
-            )}
-          </div>
-        </div>
       ) : (
-        /* Standing bid form */
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', padding: 24 }}>
-          <SectionLabel label="STANDING BID" />
-          <StandingBidForm poolId={selectedPool?.poolId} />
+        /* Post form + per-wallet bid management */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', padding: 24 }}>
+            <SectionLabel label="POST A BID" />
+            <StandingBidForm poolId={selectedPool?.poolId} />
+          </div>
+          <div>
+            <SectionLabel label="YOUR ACTIVE BIDS" />
+            <MyBids poolId={selectedPool?.poolId} address={address} />
+          </div>
         </div>
       )}
 

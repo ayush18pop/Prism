@@ -17,6 +17,8 @@ interface IPrismHookMinimal {
         uint128 liquidity;
         address lpDHolder;
         uint256 feeShareBpsLPD;
+        uint256 ilCoverageBps;
+        uint128 maxIL;
         bool    lpDSold;
         bool    settled;
     }
@@ -51,7 +53,7 @@ contract PrismRouter is IUnlockCallback {
         bool    isSwap;
         bool    isClaimFees;
         uint256 feeShareBpsLPD;
-        address hookAddr;
+        address lpDHolder;
         bool    zeroForOne;
         int256  amountSpecified;
         uint160 sqrtPriceLimitX96;
@@ -71,7 +73,7 @@ contract PrismRouter is IUnlockCallback {
             poolManager.unlock(abi.encode(CallbackData({
                 lp: msg.sender, key: key, params: params,
                 posId: bytes32(0), isAdd: true,
-                isSwap: false, isClaimFees: false, feeShareBpsLPD: 0, hookAddr: address(0),
+                isSwap: false, isClaimFees: false, feeShareBpsLPD: 0, lpDHolder: address(0),
                 zeroForOne: false, amountSpecified: 0, sqrtPriceLimitX96: 0
             }))),
             (BalanceDelta)
@@ -89,7 +91,7 @@ contract PrismRouter is IUnlockCallback {
                 lp: msg.sender, key: key,
                 params: IPoolManager.ModifyLiquidityParams(0, 0, 0, bytes32(0)),
                 posId: bytes32(0), isAdd: false,
-                isSwap: true, isClaimFees: false, feeShareBpsLPD: 0, hookAddr: address(0),
+                isSwap: true, isClaimFees: false, feeShareBpsLPD: 0, lpDHolder: address(0),
                 zeroForOne: zeroForOne, amountSpecified: amountSpecified, sqrtPriceLimitX96: sqrtPriceLimitX96
             }))),
             (BalanceDelta)
@@ -105,7 +107,7 @@ contract PrismRouter is IUnlockCallback {
             poolManager.unlock(abi.encode(CallbackData({
                 lp: msg.sender, key: key, params: params,
                 posId: posId, isAdd: false,
-                isSwap: false, isClaimFees: false, feeShareBpsLPD: 0, hookAddr: address(0),
+                isSwap: false, isClaimFees: false, feeShareBpsLPD: 0, lpDHolder: address(0),
                 zeroForOne: false, amountSpecified: 0, sqrtPriceLimitX96: 0
             }))),
             (BalanceDelta)
@@ -131,7 +133,7 @@ contract PrismRouter is IUnlockCallback {
             }),
             posId: posId, isAdd: false,
             isSwap: false, isClaimFees: true,
-            feeShareBpsLPD: pos.feeShareBpsLPD, hookAddr: hook,
+            feeShareBpsLPD: pos.feeShareBpsLPD, lpDHolder: pos.lpDHolder,
             zeroForOne: false, amountSpecified: 0, sqrtPriceLimitX96: 0
         })));
     }
@@ -156,11 +158,13 @@ contract PrismRouter is IUnlockCallback {
             uint256 lpD1  = fees1 - lpY1;
             if (lpY0 > 0) poolManager.take(d.key.currency0, d.lp, lpY0);
             if (lpY1 > 0) poolManager.take(d.key.currency1, d.lp, lpY1);
-            // LP-D fee share: leave in PoolManager credited to hook address for now.
-            // When feeShareBpsLPD > 0, a proper stageLPDFees call on the hook is needed.
-            // For current demo positions (feeShareBpsLPD=0), lpD0=lpD1=0 so this is a no-op.
-            if (lpD0 > 0) poolManager.take(d.key.currency0, d.hookAddr, lpD0);
-            if (lpD1 > 0) poolManager.take(d.key.currency1, d.hookAddr, lpD1);
+            // LP-D fee share goes straight to the recorded lpDHolder — same authorization
+            // source as PrismHook.claimFeesLPD (stored holder, not balanceOf). Direct
+            // ERC-20 take() has no receive callback, so no reentrancy surface; the hook's
+            // staged lpDFeesClaimable path is unreachable from the router flow (the hook
+            // can't call modifyLiquidity on router-owned liquidity).
+            if (lpD0 > 0) poolManager.take(d.key.currency0, d.lpDHolder, lpD0);
+            if (lpD1 > 0) poolManager.take(d.key.currency1, d.lpDHolder, lpD1);
             return abi.encode(int256(0));
         }
 

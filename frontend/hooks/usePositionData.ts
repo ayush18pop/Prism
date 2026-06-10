@@ -61,8 +61,8 @@ export function usePositionData(
   return useMemo(() => {
     if (!pos || posLoading) return { exists: false, isLoading: true }
 
-    const posArr = pos as unknown as { poolId: `0x${string}`; entrySqrtPrice: bigint; tickLower: number; tickUpper: number; liquidity: bigint; lpDHolder: `0x${string}`; feeShareBpsLPD: bigint; lpDSold: boolean; settled: boolean }
-    const { poolId, entrySqrtPrice, tickLower, tickUpper, liquidity, lpDHolder, feeShareBpsLPD, lpDSold, settled } = posArr
+    const posArr = pos as unknown as { poolId: `0x${string}`; entrySqrtPrice: bigint; tickLower: number; tickUpper: number; liquidity: bigint; lpDHolder: `0x${string}`; feeShareBpsLPD: bigint; ilCoverageBps: bigint; lpDSold: boolean; settled: boolean }
+    const { poolId, entrySqrtPrice, tickLower, tickUpper, liquidity, lpDHolder, feeShareBpsLPD, ilCoverageBps, lpDSold, settled } = posArr
 
     const inRange = currentTick >= tickLower && currentTick <= tickUpper
     const ilRaw = entrySqrtPrice > 0n ? computeILFraction(entrySqrtPrice, currentSqrtPrice) : 0n
@@ -73,7 +73,7 @@ export function usePositionData(
       exists: true, isLoading: false,
       // Raw
       poolId, entrySqrtPrice, tickLower, tickUpper, liquidity, lpDHolder,
-      feeShareBpsLPD: Number(feeShareBpsLPD), lpDSold, settled,
+      feeShareBpsLPD: Number(feeShareBpsLPD), ilCoverageBps: Number(ilCoverageBps), lpDSold, settled,
       // Balances
       lpyBalance: lpyBal ?? 0n,
       lpdBalance: lpdBal ?? 0n,

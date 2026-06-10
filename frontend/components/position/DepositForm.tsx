@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { formatUnits, parseUnits, keccak256, encodePacked } from 'viem'
 import { useWriteContract, usePublicClient, useReadContract, useAccount } from 'wagmi'
 import { toast } from 'sonner'
@@ -40,8 +40,10 @@ function decodeSlot0(raw: `0x${string}`): { sqrtPriceX96: bigint; tick: number }
 }
 
 function getSqrtAtTick(tick: number): bigint {
-  const price = Math.pow(1.0001, tick)
-  return BigInt(Math.floor(Math.sqrt(price) * Number(Q96)))
+  // Scale by 2^48 first (fits in float), then shift to 2^96 — avoids double precision loss
+  const sqrtPrice = Math.pow(1.0001, tick * 0.5)
+  const sqrtX48 = BigInt(Math.round(sqrtPrice * 281474976710656)) // 2^48
+  return sqrtX48 << 48n
 }
 
 type RangeResult = { liquidityDelta: bigint; amount0USDC: bigint; amount1PRISM: bigint; rangePosition: 'below' | 'in' | 'above' }
@@ -50,12 +52,14 @@ function computeFromPrism(prismRaw: bigint, sqrtPriceX96: bigint, tickLower: num
   if (prismRaw <= 0n || sqrtPriceX96 <= 0n) return null
   const sqrtA = getSqrtAtTick(tickLower)
   const sqrtB = getSqrtAtTick(tickUpper)
+  if (sqrtA <= 0n || sqrtB <= sqrtA) return null
   const sqrtP = sqrtPriceX96
   if (sqrtP <= sqrtA) return { liquidityDelta: 0n, amount0USDC: 0n, amount1PRISM: prismRaw, rangePosition: 'below' }
   if (sqrtP >= sqrtB) {
     const L = (prismRaw * Q96) / (sqrtB - sqrtA)
     return { liquidityDelta: L, amount0USDC: 0n, amount1PRISM: prismRaw, rangePosition: 'above' }
   }
+  if (sqrtP <= sqrtA) return null
   const L = (prismRaw * Q96) / (sqrtP - sqrtA)
   const amount0 = (L * (sqrtB - sqrtP) * Q96) / (sqrtP * sqrtB)
   return { liquidityDelta: L, amount0USDC: amount0, amount1PRISM: prismRaw, rangePosition: 'in' }
@@ -65,12 +69,14 @@ function computeFromUSDC(usdcRaw: bigint, sqrtPriceX96: bigint, tickLower: numbe
   if (usdcRaw <= 0n || sqrtPriceX96 <= 0n) return null
   const sqrtA = getSqrtAtTick(tickLower)
   const sqrtB = getSqrtAtTick(tickUpper)
+  if (sqrtA <= 0n || sqrtB <= sqrtA) return null
   const sqrtP = sqrtPriceX96
   if (sqrtP <= sqrtA) {
     const L = (usdcRaw * sqrtA * sqrtB) / ((sqrtB - sqrtA) * Q96)
     return { liquidityDelta: L, amount0USDC: usdcRaw, amount1PRISM: 0n, rangePosition: 'below' }
   }
   if (sqrtP >= sqrtB) return { liquidityDelta: 0n, amount0USDC: usdcRaw, amount1PRISM: 0n, rangePosition: 'above' }
+  if (sqrtB <= sqrtP) return null
   const L = (usdcRaw * sqrtP * sqrtB) / ((sqrtB - sqrtP) * Q96)
   const amount1 = (L * (sqrtP - sqrtA)) / Q96
   return { liquidityDelta: L, amount0USDC: usdcRaw, amount1PRISM: amount1, rangePosition: 'in' }
@@ -111,10 +117,20 @@ export function DepositForm() {
   }, [rawSlot])
 
   const ts = activeTier.tickSpacing
-  const defaultLower = String(Math.floor((currentTick - 250) / ts) * ts)
-  const defaultUpper = String(Math.ceil((currentTick + 250) / ts) * ts)
+  const defaultLower = String(Math.floor((currentTick - 2000) / ts) * ts)
+  const defaultUpper = String(Math.ceil((currentTick + 2000) / ts) * ts)
   const [tickLower, setTickLower] = useState('')
   const [tickUpper, setTickUpper] = useState('')
+  const ticksSeeded = useRef(false)
+
+  // Seed inputs once when the pool price first loads
+  useEffect(() => {
+    if (sqrtPriceX96 > 0n && !ticksSeeded.current) {
+      ticksSeeded.current = true
+      setTickLower(defaultLower)
+      setTickUpper(defaultUpper)
+    }
+  }, [sqrtPriceX96]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const effectiveLower = tickLower !== '' ? tickLower : (sqrtPriceX96 > 0n ? defaultLower : '-500')
   const effectiveUpper = tickUpper !== '' ? tickUpper : (sqrtPriceX96 > 0n ? defaultUpper : '500')
@@ -138,7 +154,20 @@ export function DepositForm() {
 
   const tLower = Number(effectiveLower)
   const tUpper = Number(effectiveUpper)
-  const tickError = !isNaN(tLower) && !isNaN(tUpper) && tLower >= tUpper ? 'Lower tick must be less than upper tick' : null
+
+  function snapTick(val: string, isLower: boolean, setter: (v: string) => void) {
+    if (val === '' || val === '-') return
+    const n = Number(val)
+    if (isNaN(n)) return
+    const snapped = isLower ? Math.floor(n / ts) * ts : Math.ceil(n / ts) * ts
+    setter(String(Math.max(-887270, Math.min(887270, snapped))))
+  }
+
+  const tickError =
+    (!isNaN(tLower) && !isNaN(tUpper) && tLower >= tUpper) ? 'Lower tick must be less than upper tick' :
+    (!isNaN(tLower) && tLower % ts !== 0) ? `Tick ${tLower} must be a multiple of ${ts} (snap: ${Math.floor(tLower / ts) * ts})` :
+    (!isNaN(tUpper) && tUpper % ts !== 0) ? `Tick ${tUpper} must be a multiple of ${ts} (snap: ${Math.ceil(tUpper / ts) * ts})` :
+    null
 
   const computed = useMemo(() => {
     if (isNaN(tLower) || isNaN(tUpper) || tLower >= tUpper || sqrtPriceX96 <= 0n) return null
@@ -303,8 +332,13 @@ export function DepositForm() {
             </label>
             <input
               type="number"
-              value={label === 'TICK LOWER' ? (tickLower !== '' ? tickLower : val) : (tickUpper !== '' ? tickUpper : val)}
+              value={label === 'TICK LOWER' ? tickLower : tickUpper}
               onChange={e => setter(e.target.value)}
+              onBlur={e => {
+                const isLower = label === 'TICK LOWER'
+                snapTick(e.target.value, isLower, setter)
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--border-default)'
+              }}
               placeholder={val}
               style={{
                 width: '100%', padding: '8px 10px',
@@ -314,7 +348,6 @@ export function DepositForm() {
                 outline: 'none',
               }}
               onFocus={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-strong)' }}
-              onBlur={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-default)' }}
             />
           </div>
         ))}

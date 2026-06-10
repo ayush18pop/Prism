@@ -60,7 +60,7 @@ Prism:    Protocol buys LP-D with USDC
           → net cost = actual IL, not perpetual emissions
 ```
 
-A `setStandingBid` call pre-deposits USDC once. Every subsequent LP deposit automatically sells LP-D in the same transaction — no second step, no manual negotiation.
+A `postBid` call pre-deposits USDC once into an on-chain order book (up to 20 bids per pool). Every subsequent LP deposit automatically sells LP-D to the best-scoring bid in the same transaction — no second step, no manual negotiation.
 
 ---
 
@@ -106,11 +106,11 @@ PrismHook ◄──── PoolManager                 │  PositionOpened
     │                                        │  Swap events
     ├── mint LP-Y (ERC-1155)                 │
     ├── mint LP-D (ERC-1155)                 │  fires on condition
-    └── auto-fill standing bid               │
+    └── auto-fill best order-book bid        │
                                              ▼
 Protocol Wallet                         PrismCallback
     │                                        │
-    └── setStandingBid(USDC) ──────────►     └── settleLPD(posId)
+    └── postBid(USDC) ─────────────────►     └── settleLPD(posId)
                                                   (calls back to hook)
 ```
 
@@ -120,7 +120,7 @@ Protocol Wallet                         PrismCallback
 
 _GIF: deposit → LP-D auto-sold to standing bid → IL drops → RSC fires settlement → LP-Y holder claims USDC compensation_
 
-Live deployment: [Unichain Sepolia](https://sepolia.uniscan.xyz/address/0x12be5F9664F2eB1b74f72e9B9f3054d2eB434700)
+Live deployment: [Unichain Sepolia](https://unichain-sepolia.blockscout.com/address/0xbE169aD708CEA009236943607980DF7Ec8ec4700)
 
 ---
 
@@ -129,21 +129,26 @@ Live deployment: [Unichain Sepolia](https://sepolia.uniscan.xyz/address/0x12be5F
 <details>
 <summary>Deployed contracts</summary>
 
-**Unichain Sepolia (Chain ID 1301)**
+**Unichain Sepolia (Chain ID 1301)** — deployed at block 54240730
 
 | Contract      | Address                                      |
 | ------------- | -------------------------------------------- |
-| PrismHook     | `0x12be5F9664F2eB1b74f72e9B9f3054d2eB434700` |
-| LPYToken      | `0x80aa616eDb2e333c804B125A17167C8236036eE0` |
-| LPDToken      | `0x5f214AD25318F1bcfb8cE7B25e91f2619669307C` |
-| PrismCallback | `0xBf662f9A4aC6a002C9870d2Ac48993757240bb1f` |
+| PrismHook     | `0xbE169aD708CEA009236943607980DF7Ec8ec4700` |
+| LPYToken      | `0xf3077cCFBE8Be2cAAb7C5B763858e49b87f44513` |
+| LPDToken      | `0xd2AC3dB3021ea25d4D40Df5EF7764Aac10D87F3E` |
+| PrismCallback | `0x7cad80B54FEc3bEBf932688FDCdbD3926eedb1e1` |
+| PrismRouter   | _see `deployments/unichain-sepolia.json`_    |
 | USDC (Mock)   | `0x31d0220469e10c4E71834a79b1f276d740d3768F` |
+| PRISM (Mock)  | `0xCf864db2623735b28BEC4863490e19b13C7B1a5F` |
+
+Demo pool: USDC/PRISM, fee=500 (0.05%), tickSpacing=10 —
+poolId `0xa072e8c53693e3ad8ee2242ecbdad917c083bbf616328a4e2556fd73f72a8773`
 
 **Lasna (Chain ID 5318007)**
 
 | Contract | Address                                      |
 | -------- | -------------------------------------------- |
-| PrismRSC | `0x7F6e422f3184CBa32b655147C7233CdD007552A2` |
+| PrismRSC | `0xd42dbe0b1373B0FBBb78E01a9489362187858a7f` |
 
 </details>
 
@@ -183,7 +188,7 @@ forge build
 forge test -vvv
 ```
 
-56 tests, 7 required settlement cases. Coverage: 90%+ lines on PrismHook.
+65 tests, 7 required settlement cases. Coverage: 90%+ lines on PrismHook.
 
 </details>
 
@@ -193,7 +198,7 @@ forge test -vvv
 - LP-D has no automatic price discovery at launch — requires a willing first buyer (protocol as its own LP-D buyer on cold start)
 - v1 targets token/USDC pairs only — volatile/volatile pairs require a different collateral model
 - LVR (loss-versus-rebalancing from arb) is not addressed
-- One standing bid per pool in v1 — multi-bidder queue is v2 scope
+- Order book capped at 20 active bids per pool (`MAX_BIDS_PER_POOL`) to bound `afterAddLiquidity` gas
 
 </details>
 

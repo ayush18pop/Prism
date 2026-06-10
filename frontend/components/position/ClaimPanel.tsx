@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { ADDRESSES, DEMO_POOL_KEY } from '@/lib/addresses'
 import { PRISM_HOOK_ABI, PRISM_ROUTER_ABI } from '@/lib/abis'
 import type { FeeHistory } from '@/hooks/usePrismHook'
+import type { PoolKeyStruct } from '@/hooks/usePoolInitialized'
 
 const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000' as const
 const BLOCKSCOUT = 'https://unichain-sepolia.blockscout.com/tx/'
@@ -17,9 +18,15 @@ interface ClaimPanelProps {
   lpdClaimable: bigint
   lpDFees: { amount0: bigint; amount1: bigint }
   feeHistory?: FeeHistory
+  /** unclaimed LP-Y fee share computed from PoolManager storage; legacy = position
+   *  was deposited via an older router and can't be claimed through the current one */
+  pendingFees?: { lpY0: bigint; lpY1: bigint; legacy: boolean }
+  /** the position's actual pool key (resolved from its poolId); falls back to the demo pool */
+  poolKey?: PoolKeyStruct
   settled: boolean
   lpDHolder: `0x${string}`
   account: `0x${string}`
+  hasLPY: boolean
   tickLower: number
   tickUpper: number
   liquidity: bigint
@@ -31,14 +38,15 @@ function fmtFee(amount: bigint, decimals: number): string {
 }
 
 export function ClaimPanel({
-  posId, ilComp, lpdClaimable, lpDFees, feeHistory, settled,
-  lpDHolder, account, tickLower, tickUpper, liquidity,
+  posId, ilComp, lpdClaimable, lpDFees, feeHistory, pendingFees, poolKey, settled,
+  lpDHolder, account, hasLPY, tickLower, tickUpper, liquidity,
 }: ClaimPanelProps) {
   const client = usePublicClient({ chainId: 1301 })
   const { writeContractAsync: write } = useWriteContract()
   const [loading, setLoading] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const key = poolKey ?? DEMO_POOL_KEY
 
   const isLPDHolder = lpDHolder.toLowerCase() === account.toLowerCase()
   const hasLPDFees  = lpDFees.amount0 > 0n || lpDFees.amount1 > 0n
@@ -48,9 +56,9 @@ export function ClaimPanel({
 
   const hook = ADDRESSES.PrismHook
 
-  async function exec(key: string, label: string, fn: () => Promise<`0x${string}`>) {
+  async function exec(actionKey: string, label: string, fn: () => Promise<`0x${string}`>) {
     if (!client) { toast.error('No RPC client, check chain connection'); return }
-    setLoading(key)
+    setLoading(actionKey)
     try {
       const tx = await fn()
       const receipt = await client.waitForTransactionReceipt({ hash: tx })
@@ -74,7 +82,7 @@ export function ClaimPanel({
         abi: PRISM_ROUTER_ABI,
         functionName: 'removeLiquidity',
         args: [
-          DEMO_POOL_KEY,
+          key,
           { tickLower, tickUpper, liquidityDelta: -liquidity, salt: ZERO_BYTES32 },
           posId,
         ],
@@ -109,26 +117,32 @@ export function ClaimPanel({
         />
       )}
 
-      {/* Swap Fees (LP-Y share) */}
-      {!settled && (
+      {/* Swap Fees (LP-Y share) — only shown if this wallet actually holds LP-Y */}
+      {!settled && hasLPY && (
         <ActionRow
           accentColor="var(--text-secondary)"
           mutedBg="var(--bg-raised)"
           mutedBorder="var(--border-subtle)"
           label="Swap Fees · LP-Y"
           value={(() => {
-            if (!feeHistory || feeHistory.claimCount === 0) return 'accumulating...'
+            if (pendingFees?.legacy) return 'legacy position — exit and redeposit'
             const parts = [
-              feeHistory.lpYTotal0 > 0n ? `${fmtFee(feeHistory.lpYTotal0, 6)} USDC` : '',
-              feeHistory.lpYTotal1 > 0n ? `${fmtFee(feeHistory.lpYTotal1, 6)} PRISM` : '',
+              pendingFees && pendingFees.lpY0 > 0n ? `${fmtFee(pendingFees.lpY0, 6)} USDC` : '',
+              pendingFees && pendingFees.lpY1 > 0n ? `${fmtFee(pendingFees.lpY1, 6)} PRISM` : '',
             ].filter(Boolean)
             return parts.length > 0 ? parts.join(' + ') : 'accumulating...'
           })()}
-          sublabel={feeHistory && feeHistory.claimCount > 0 ? `${feeHistory.claimCount} claim${feeHistory.claimCount !== 1 ? 's' : ''} total` : undefined}
+          sublabel={feeHistory && feeHistory.claimCount > 0
+            ? `${[
+                feeHistory.lpYTotal0 > 0n ? `${fmtFee(feeHistory.lpYTotal0, 6)} USDC` : '',
+                feeHistory.lpYTotal1 > 0n ? `${fmtFee(feeHistory.lpYTotal1, 6)} PRISM` : '',
+              ].filter(Boolean).join(' + ') || '0'} claimed across ${feeHistory.claimCount} claim${feeHistory.claimCount !== 1 ? 's' : ''}`
+            : undefined}
           btnLabel="Claim Fees"
           loading={loading === 'fees-y'}
+          disabled={pendingFees?.legacy}
           onClick={() => exec('fees-y', 'Swap fees claimed', () =>
-            write({ address: ADDRESSES.PrismRouter!, abi: PRISM_ROUTER_ABI, functionName: 'claimFees', args: [DEMO_POOL_KEY, posId, hook], chainId: 1301 })
+            write({ address: ADDRESSES.PrismRouter!, abi: PRISM_ROUTER_ABI, functionName: 'claimFees', args: [key, posId, hook], chainId: 1301 })
           )}
         />
       )}
@@ -185,13 +199,13 @@ export function ClaimPanel({
           btnLabel="Claim"
           loading={loading === 'fees-d'}
           onClick={() => exec('fees-d', 'LP-D fees claimed', () =>
-            write({ address: hook, abi: PRISM_HOOK_ABI, functionName: 'claimFeesLPD', args: [DEMO_POOL_KEY, posId], chainId: 1301 })
+            write({ address: hook, abi: PRISM_HOOK_ABI, functionName: 'claimFeesLPD', args: [key, posId], chainId: 1301 })
           )}
         />
       )}
 
-      {/* Remove Liquidity */}
-      {!settled && ADDRESSES.PrismRouter && liquidity > 0n && (
+      {/* Remove Liquidity — only the LP-Y holder (depositor) can remove */}
+      {!settled && hasLPY && ADDRESSES.PrismRouter && liquidity > 0n && (
         <div style={hasClaimActions ? { borderTop: '1px solid var(--border-subtle)', paddingTop: 8, marginTop: 4 } : {}}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -205,11 +219,11 @@ export function ClaimPanel({
                 {confirmRemove ? 'This is irreversible' : 'Remove Liquidity'}
               </p>
               <p style={{ fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)', fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-                exit position
+                {pendingFees?.legacy ? 'legacy position — exit via old router' : 'exit position'}
               </p>
             </div>
             <button
-              disabled={loading === 'remove'}
+              disabled={loading === 'remove' || pendingFees?.legacy}
               onClick={handleRemoveClick}
               style={{
                 padding: '6px 12px', fontSize: 12, cursor: loading === 'remove' ? 'not-allowed' : 'pointer',
@@ -229,7 +243,7 @@ export function ClaimPanel({
   )
 }
 
-function ActionRow({ accentColor, mutedBg, mutedBorder, label, value, sublabel, btnLabel, loading, onClick }: {
+function ActionRow({ accentColor, mutedBg, mutedBorder, label, value, sublabel, btnLabel, loading, disabled, onClick }: {
   accentColor: string
   mutedBg: string
   mutedBorder: string
@@ -238,8 +252,10 @@ function ActionRow({ accentColor, mutedBg, mutedBorder, label, value, sublabel, 
   sublabel?: string
   btnLabel: string
   loading: boolean
+  disabled?: boolean
   onClick: () => void
 }) {
+  const inactive = loading || disabled
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -253,12 +269,12 @@ function ActionRow({ accentColor, mutedBg, mutedBorder, label, value, sublabel, 
         )}
       </div>
       <button
-        disabled={loading}
+        disabled={inactive}
         onClick={onClick}
         style={{
-          padding: '6px 12px', fontSize: 12, fontWeight: 500, cursor: loading ? 'not-allowed' : 'pointer',
+          padding: '6px 12px', fontSize: 12, fontWeight: 500, cursor: inactive ? 'not-allowed' : 'pointer',
           background: accentColor, border: 'none', color: '#080808',
-          opacity: loading ? 0.5 : 1, transition: 'opacity 150ms',
+          opacity: inactive ? 0.5 : 1, transition: 'opacity 150ms',
         }}
       >
         {loading ? '…' : btnLabel}

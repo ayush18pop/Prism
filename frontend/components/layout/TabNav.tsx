@@ -65,7 +65,7 @@ export function TabNav() {
                   href={tab.href}
                   style={{
                     display: 'flex', alignItems: 'center',
-                    padding: '5px 12px', borderRadius: 6,
+                    padding: '5px 12px',
                     margin: '0 1px',
                     fontSize: 13, fontWeight: active ? 500 : 400,
                     color: tabColor,

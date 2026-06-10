@@ -6,6 +6,8 @@ import { ILStatusBadge } from './ILStatusBadge'
 import { ClaimPanel } from './ClaimPanel'
 import { TransferPanel } from './TransferPanel'
 import { usePosition, useVault, useILCompensation, useLPDClaimable, useLPDFeesClaimable, useFeeHistory } from '@/hooks/usePrismHook'
+import { usePendingFees } from '@/hooks/usePendingFees'
+import { poolKeyForPoolId } from '@/hooks/usePoolInitialized'
 import { ADDRESSES } from '@/lib/addresses'
 import { ERC1155_ABI } from '@/lib/abis'
 
@@ -24,6 +26,7 @@ export function PositionCard({ posId, currentSqrtPrice, currentTick, account, in
   const { data: lpdClaimable } = useLPDClaimable(posId)
   const { data: lpDFees }      = useLPDFeesClaimable(posId)
   const { data: feeHistory }   = useFeeHistory(posId, pos?.feeShareBpsLPD ? Number(pos.feeShareBpsLPD) : 0)
+  const pending = usePendingFees(pos?.poolId, pos?.tickLower ?? 0, pos?.tickUpper ?? 0)
 
   const { data: lpYBal } = useReadContract({
     address: ADDRESSES.LPYToken,
@@ -43,6 +46,16 @@ export function PositionCard({ posId, currentSqrtPrice, currentTick, account, in
   if (!pos) return null
 
   const { settled, lpDSold, tickLower, tickUpper, lpDHolder, liquidity } = pos
+
+  // LP-Y receives (10000 − φ)/10000 of pending fees; the rest goes to LP-D
+  const phi = BigInt(pos.feeShareBpsLPD ?? 0n)
+  const pendingFees = {
+    lpY0: (pending.pending0 * (10000n - phi)) / 10000n,
+    lpY1: (pending.pending1 * (10000n - phi)) / 10000n,
+    // liquidity exists in the hook but not under the current router in PoolManager
+    // → deposited through an older router; claimFees would revert CannotUpdateEmptyPosition
+    legacy: !pending.isLoading && pending.managerLiquidity === 0n && BigInt(liquidity) > 0n,
+  }
 
   const inRange = currentTick !== null && currentTick >= tickLower && currentTick <= tickUpper
   const isLPYHolder  = lpYBal != null && lpYBal > 0n
@@ -142,9 +155,12 @@ export function PositionCard({ posId, currentSqrtPrice, currentTick, account, in
             lpdClaimable={lpdClaimable ?? 0n}
             lpDFees={lpDFees ? { amount0: lpDFees[0], amount1: lpDFees[1] } : { amount0: 0n, amount1: 0n }}
             feeHistory={feeHistory}
+            pendingFees={pendingFees}
+            poolKey={poolKeyForPoolId(pos.poolId)}
             settled={settled}
             lpDHolder={lpDHolder}
             account={account}
+            hasLPY={isLPYHolder}
             tickLower={tickLower}
             tickUpper={tickUpper}
             liquidity={BigInt(liquidity)}

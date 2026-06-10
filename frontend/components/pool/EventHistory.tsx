@@ -8,7 +8,7 @@ import { ADDRESSES } from '@/lib/addresses'
 const CHUNK = 5000n
 
 const EVENTS = [
-  parseAbiItem('event PositionOpened(bytes32 indexed posId, uint160 entrySqrtPrice, int24 tickLower, int24 tickUpper, uint256 collateral)'),
+  parseAbiItem('event PositionOpened(bytes32 indexed posId, uint160 entrySqrtPrice, int24 tickLower, int24 tickUpper, uint256 ilCoverageBps, uint256 collateral)'),
   parseAbiItem('event LPDAutoPurchased(bytes32 indexed posId, address buyer, uint256 usdcCost, uint256 feeShareBpsLPD)'),
   parseAbiItem('event LPDSettled(bytes32 indexed posId, uint256 ilCost, uint256 refundedToHolder)'),
   parseAbiItem('event LPDLiquidated(bytes32 indexed posId, uint256 collateralConsumed)'),

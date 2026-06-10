@@ -43,6 +43,35 @@ export function computePoolId(
   ))
 }
 
+// The four candidate USDC/PRISM fee tiers offered in the UI
+const FEE_TIERS = [
+  { fee: 100,   tickSpacing: 1   },
+  { fee: 500,   tickSpacing: 10  },
+  { fee: 3000,  tickSpacing: 60  },
+  { fee: 10000, tickSpacing: 200 },
+] as const
+
+export interface PoolKeyStruct {
+  currency0: `0x${string}`
+  currency1: `0x${string}`
+  fee: number
+  tickSpacing: number
+  hooks: `0x${string}`
+}
+
+/** Resolve a position's full PoolKey from its poolId by matching against the
+ *  known USDC/PRISM fee tiers. Returns undefined for unknown pools. */
+export function poolKeyForPoolId(poolId: `0x${string}` | undefined): PoolKeyStruct | undefined {
+  const u = ADDRESSES.USDC, p = ADDRESSES.PRISM, h = ADDRESSES.PrismHook
+  if (!poolId || !u || !p || !h) return undefined
+  for (const { fee, tickSpacing } of FEE_TIERS) {
+    if (computePoolId(u, p, fee, tickSpacing, h).toLowerCase() === poolId.toLowerCase()) {
+      return { currency0: u, currency1: p, fee, tickSpacing, hooks: h }
+    }
+  }
+  return undefined
+}
+
 /** Check if a pool is initialized and return its current price/tick */
 export function usePoolInitialized(poolId: `0x${string}` | undefined) {
   const slot = poolId ? poolStateSlot(poolId) : undefined

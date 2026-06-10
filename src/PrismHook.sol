@@ -56,6 +56,8 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         uint128  liquidity;
         address  lpDHolder;       // address that currently holds LP-D (set on purchase/auto-fill)
         uint256  feeShareBpsLPD;  // LP-D fee share in bps; locked at sale time; 0 when LP holds both
+        uint256  ilCoverageBps;   // fraction of IL covered by vault (1–10000); frozen at fill time
+        uint128  maxIL;           // _computeMaxILCeil at fill time (WAD); settlement denominator
         bool     lpDSold;         // true once LP-D has left the LP's wallet
         bool     settled;         // idempotency guard
     }
@@ -64,6 +66,7 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         address  bidder;
         uint256  pricePerUnit;    // WAD coverage fraction: bidder covers IL up to this fraction
         uint256  feeShareBpsLPD;  // LP-D fee share offered by this bid (basis points, 0–10000)
+        uint256  ilCoverageBps;   // fraction of maxIL the bidder covers (1–10000); 10000 = 100%
         uint256  maxCollateral;   // total USDC pre-deposited (6 dec)
         uint256  usedCollateral;  // USDC already allocated to filled bids (6 dec)
         bool     active;
@@ -74,10 +77,26 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         uint256 amount1;
     }
 
+    /// @dev Tier-2 order book bid. Multiple active bids per pool.
+    struct Bid {
+        address  bidder;
+        uint256  pricePerUnit;   // WAD coverage fraction
+        uint256  feeShareBpsLPD; // basis points (0–10000)
+        uint256  ilCoverageBps;  // fraction of maxIL covered (1–10000)
+        uint256  maxCollateral;  // total USDC deposited
+        uint256  usedCollateral; // USDC already locked into positions
+        bool     active;
+    }
+
     // ── mappings ─────────────────────────────────────────────────────────────
 
     mapping(bytes32 posId  => Position)    public positions;
     mapping(bytes32 poolId => StandingBid) public standingBids;
+
+    // Tier-2 order book
+    mapping(bytes32 poolId => mapping(uint256 bidId => Bid)) public bids;
+    mapping(bytes32 poolId => uint256)                       public nextBidId;
+    mapping(bytes32 posId  => uint256)                       public filledBidId;
     mapping(bytes32 posId  => uint256)     public lpYCompensation;    // staged USDC for LP-Y holder
     mapping(bytes32 posId  => uint256)     public lpDCollateralVault; // locked USDC from LP-D buyer
     mapping(bytes32 posId  => uint256)     public lpDClaimable;       // LP-D holder's post-settlement claim
@@ -90,6 +109,7 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
     // ── constants ────────────────────────────────────────────────────────────
 
     uint256 internal constant WAD = 1e18;
+    uint256 public  constant MAX_BIDS_PER_POOL = 20;
 
     // ── errors ───────────────────────────────────────────────────────────────
 
@@ -107,7 +127,9 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
     error LPDAlreadySold(bytes32 posId);
     error CollateralInsufficient(uint256 required, uint256 provided);
     error InvalidFeeShare(uint256 value);
+    error InvalidCoverageBps(uint256 value);
     error NoFeesClaimable(bytes32 posId);
+    error MaxBidsReached(bytes32 poolId, uint256 limit);
 
     // ── events ───────────────────────────────────────────────────────────────
 
@@ -116,7 +138,8 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         uint160 entrySqrtPrice,
         int24   tickLower,
         int24   tickUpper,
-        uint256 collateral   // 0 if no standing bid; actual collateral if auto-filled
+        uint256 ilCoverageBps,  // 0 if no bid filled; bid's ilCoverageBps if auto-filled
+        uint256 collateral      // 0 if no standing bid; actual collateral if auto-filled
     );
     event LPDAutoPurchased(bytes32 indexed posId, address buyer, uint256 usdcCost, uint256 feeShareBpsLPD);
     event LPDSettled(bytes32 indexed posId, uint256 ilCost, uint256 refundedToHolder);
@@ -124,8 +147,12 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
     event FeesClaimed(bytes32 indexed posId, address recipient, uint256 fees0, uint256 fees1);
     event LPDFeesClaimed(bytes32 indexed posId, address recipient, uint256 amount0, uint256 amount1);
     event ILCompensationClaimed(bytes32 indexed posId, address recipient, uint256 usdc);
-    event StandingBidSet(bytes32 indexed poolId, address bidder, uint256 pricePerUnit, uint256 feeShareBpsLPD, uint256 maxCollateral);
+    event StandingBidSet(bytes32 indexed poolId, address bidder, uint256 pricePerUnit, uint256 feeShareBpsLPD, uint256 ilCoverageBps, uint256 maxCollateral);
     event StandingBidCancelled(bytes32 indexed poolId, address bidder, uint256 refunded);
+    // Tier-2 order book events
+    event BidPosted(bytes32 indexed poolId, uint256 bidId, address bidder, uint256 pricePerUnit, uint256 feeShareBpsLPD, uint256 ilCoverageBps, uint256 maxCollateral);
+    event BidCancelled(bytes32 indexed poolId, uint256 bidId, address bidder, uint256 refunded);
+    event BidFilled(bytes32 indexed posId, uint256 bidId, address buyer, uint256 usdcCost, uint256 feeShareBpsLPD, uint256 ilCoverageBps);
 
     // ── constructor ─────────────────────────────────────────────────────────
 
@@ -165,6 +192,7 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
 
     /// @notice One-time: set the RSC callback contract (step 5 of deploy order).
     function setCallbackContract(address _callback) external onlyOwner {
+        if (callbackContract != address(0)) revert CallbackAlreadySet();
         callbackContract = _callback;
     }
 
@@ -223,6 +251,8 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
             liquidity:       liquidity,
             lpDHolder:       lp,
             feeShareBpsLPD:  0,
+            ilCoverageBps:   0,
+            maxIL:           0,
             lpDSold:         false,
             settled:         false
         });
@@ -231,32 +261,69 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
 
         lpYToken.mint(lp, uint256(posId), liquidity);
 
-        StandingBid storage bid = standingBids[poolId];
-        if (bid.active) {
-            // maxIL for this position as a WAD fraction, rounded up for safety
-            uint256 maxIL = _computeMaxILCeil(sqrtP0, params.tickLower, params.tickUpper, liquidity);
+        // Score every active order-book bid; pick the one with the highest
+        // score = ilCoverageBps × (10000 − feeShareBpsLPD) / 10000.
+        // Fall back to the legacy standingBid if no order-book bids exist.
+        uint256 maxIL    = _computeMaxILCeil(sqrtP0, params.tickLower, params.tickUpper, liquidity);
+        uint256 bestScore   = 0;
+        uint256 bestBidId   = type(uint256).max; // sentinel: no bid found
+        uint256 bidCount    = nextBidId[poolId];
 
-            // Adequacy: bidder's coverage fraction must be >= position's maxIL fraction.
-            // pricePerUnit is a WAD coverage fraction (e.g. 0.5e18 = willing to cover 50% IL).
-            // USDC to lock = (bid's total deposit) × maxIL / WAD — proportional to actual risk.
-            if (bid.pricePerUnit >= maxIL) {
-                uint256 usdcForPos = (bid.maxCollateral * maxIL) / WAD; // rounds DOWN (safe)
-                if (bid.usedCollateral + usdcForPos <= bid.maxCollateral) {
-                    bid.usedCollateral               += usdcForPos;
-                    lpDCollateralVault[posId]         = usdcForPos;
-                    positions[posId].lpDHolder        = bid.bidder;
-                    positions[posId].feeShareBpsLPD   = bid.feeShareBpsLPD;
-                    positions[posId].lpDSold          = true;
-                    lpDToken.mint(bid.bidder, uint256(posId), liquidity);
-                    emit LPDAutoPurchased(posId, bid.bidder, usdcForPos, bid.feeShareBpsLPD);
-                    emit PositionOpened(posId, sqrtP0, params.tickLower, params.tickUpper, usdcForPos);
-                    return (IHooks.afterAddLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
+        for (uint256 i = 0; i < bidCount; i++) {
+            Bid storage b = bids[poolId][i];
+            if (!b.active) continue;
+            uint256 coveredIL_i = (maxIL * b.ilCoverageBps + 9999) / 10000;
+            if (b.pricePerUnit < coveredIL_i) continue;
+            uint256 usdcCost_i  = (b.maxCollateral * coveredIL_i) / WAD;
+            if (b.usedCollateral + usdcCost_i > b.maxCollateral) continue;
+            uint256 score_i = b.ilCoverageBps * (10000 - b.feeShareBpsLPD) / 10000;
+            if (score_i > bestScore) { bestScore = score_i; bestBidId = i; }
+        }
+
+        if (bestBidId != type(uint256).max) {
+            Bid storage winBid   = bids[poolId][bestBidId];
+            uint256 coveredIL    = (maxIL * winBid.ilCoverageBps + 9999) / 10000;
+            uint256 usdcForPos   = (winBid.maxCollateral * coveredIL) / WAD;
+            winBid.usedCollateral             += usdcForPos;
+            lpDCollateralVault[posId]          = usdcForPos;
+            filledBidId[posId]                 = bestBidId;
+            positions[posId].lpDHolder         = winBid.bidder;
+            positions[posId].feeShareBpsLPD    = winBid.feeShareBpsLPD;
+            positions[posId].ilCoverageBps     = winBid.ilCoverageBps;
+            positions[posId].maxIL             = uint128(maxIL);
+            positions[posId].lpDSold           = true;
+            lpDToken.mint(winBid.bidder, uint256(posId), liquidity);
+            emit BidFilled(posId, bestBidId, winBid.bidder, usdcForPos, winBid.feeShareBpsLPD, winBid.ilCoverageBps);
+            emit PositionOpened(posId, sqrtP0, params.tickLower, params.tickUpper, winBid.ilCoverageBps, usdcForPos);
+            return (IHooks.afterAddLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
+        }
+
+        // Legacy fallback: single standingBid (kept for backward compatibility until old functions removed)
+        {
+            StandingBid storage bid = standingBids[poolId];
+            if (bid.active) {
+                uint256 coveredIL = (maxIL * bid.ilCoverageBps + 9999) / 10000;
+                if (bid.pricePerUnit >= coveredIL) {
+                    uint256 usdcForPos = (bid.maxCollateral * coveredIL) / WAD;
+                    if (bid.usedCollateral + usdcForPos <= bid.maxCollateral) {
+                        bid.usedCollateral              += usdcForPos;
+                        lpDCollateralVault[posId]        = usdcForPos;
+                        positions[posId].lpDHolder       = bid.bidder;
+                        positions[posId].feeShareBpsLPD  = bid.feeShareBpsLPD;
+                        positions[posId].ilCoverageBps   = bid.ilCoverageBps;
+                        positions[posId].maxIL           = uint128(maxIL);
+                        positions[posId].lpDSold         = true;
+                        lpDToken.mint(bid.bidder, uint256(posId), liquidity);
+                        emit LPDAutoPurchased(posId, bid.bidder, usdcForPos, bid.feeShareBpsLPD);
+                        emit PositionOpened(posId, sqrtP0, params.tickLower, params.tickUpper, bid.ilCoverageBps, usdcForPos);
+                        return (IHooks.afterAddLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
+                    }
                 }
             }
         }
 
         lpDToken.mint(lp, uint256(posId), liquidity);
-        emit PositionOpened(posId, sqrtP0, params.tickLower, params.tickUpper, 0);
+        emit PositionOpened(posId, sqrtP0, params.tickLower, params.tickUpper, 0, 0);
         return (IHooks.afterAddLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
     }
 
@@ -288,9 +355,12 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         if (pos.lpDSold && ilRaw < 0) {
             uint256 vault = lpDCollateralVault[posId];
             uint256 ilAbs = uint256(-ilRaw);
-            // proportional USDC draw: ilCostUSDC = ilAbs * vault / WAD, capped at vault
-            uint256 ilCost = (ilAbs * vault) / WAD;
-            if (ilCost > vault) ilCost = vault;
+            // Vault was sized at deposit to cover maxIL. Draw proportionally:
+            // ilCost = vault * (currentIL / maxIL), capped at vault.
+            // If maxIL==0 (position opened before this fix), treat as full draw.
+            uint256 ilCost = (pos.maxIL == 0 || ilAbs >= pos.maxIL)
+                ? vault
+                : (vault * ilAbs) / pos.maxIL;
 
             lpDCollateralVault[posId] -= ilCost;
             lpYCompensation[posId]     = ilCost;
@@ -410,9 +480,11 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         bytes32 poolId,
         uint256 pricePerUnit,
         uint256 feeShareBpsLPD,
+        uint256 ilCoverageBps,
         uint256 maxCollateral
     ) external nonReentrant {
         if (feeShareBpsLPD > 10000) revert InvalidFeeShare(feeShareBpsLPD);
+        if (ilCoverageBps == 0 || ilCoverageBps > 10000) revert InvalidCoverageBps(ilCoverageBps);
 
         StandingBid storage existing = standingBids[poolId];
         if (existing.active) {
@@ -429,11 +501,12 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
             bidder:          msg.sender,
             pricePerUnit:    pricePerUnit,
             feeShareBpsLPD:  feeShareBpsLPD,
+            ilCoverageBps:   ilCoverageBps,
             maxCollateral:   maxCollateral,
             usedCollateral:  0,
             active:          true
         });
-        emit StandingBidSet(poolId, msg.sender, pricePerUnit, feeShareBpsLPD, maxCollateral);
+        emit StandingBidSet(poolId, msg.sender, pricePerUnit, feeShareBpsLPD, ilCoverageBps, maxCollateral);
     }
 
     function cancelStandingBid(bytes32 poolId) external nonReentrant {
@@ -447,8 +520,51 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         emit StandingBidCancelled(poolId, msg.sender, unspent);
     }
 
-    function purchaseLPD(bytes32 posId, uint256 collateralAmount, uint256 feeShareBpsLPD) external nonReentrant {
+    // ── Tier-2 order book ────────────────────────────────────────────────────
+
+    /// @notice Post a bid to the order book. Multiple bids per pool allowed up to MAX_BIDS_PER_POOL.
+    ///         Returns the assigned bidId. USDC is locked immediately.
+    function postBid(
+        bytes32 poolId,
+        uint256 pricePerUnit,
+        uint256 feeShareBpsLPD,
+        uint256 ilCoverageBps,
+        uint256 maxCollateral
+    ) external nonReentrant returns (uint256 bidId) {
         if (feeShareBpsLPD > 10000) revert InvalidFeeShare(feeShareBpsLPD);
+        if (ilCoverageBps == 0 || ilCoverageBps > 10000) revert InvalidCoverageBps(ilCoverageBps);
+        if (nextBidId[poolId] >= MAX_BIDS_PER_POOL) revert MaxBidsReached(poolId, MAX_BIDS_PER_POOL);
+
+        bidId = nextBidId[poolId]++;
+        bids[poolId][bidId] = Bid({
+            bidder:         msg.sender,
+            pricePerUnit:   pricePerUnit,
+            feeShareBpsLPD: feeShareBpsLPD,
+            ilCoverageBps:  ilCoverageBps,
+            maxCollateral:  maxCollateral,
+            usedCollateral: 0,
+            active:         true
+        });
+
+        IERC20(USDC).transferFrom(msg.sender, address(this), maxCollateral);
+        emit BidPosted(poolId, bidId, msg.sender, pricePerUnit, feeShareBpsLPD, ilCoverageBps, maxCollateral);
+    }
+
+    /// @notice Cancel an order book bid. Refunds unspent USDC. BidId is consumed permanently.
+    function cancelBid(bytes32 poolId, uint256 bidId) external nonReentrant {
+        Bid storage bid = bids[poolId][bidId];
+        if (bid.bidder != msg.sender) revert NotBidder(poolId);
+
+        uint256 unspent = bid.maxCollateral - bid.usedCollateral;
+        bid.active = false;
+        bid.usedCollateral = bid.maxCollateral;
+        if (unspent > 0) IERC20(USDC).transfer(msg.sender, unspent);
+        emit BidCancelled(poolId, bidId, msg.sender, unspent);
+    }
+
+    function purchaseLPD(bytes32 posId, uint256 collateralAmount, uint256 feeShareBpsLPD, uint256 ilCoverageBps) external nonReentrant {
+        if (feeShareBpsLPD > 10000) revert InvalidFeeShare(feeShareBpsLPD);
+        if (ilCoverageBps == 0 || ilCoverageBps > 10000) revert InvalidCoverageBps(ilCoverageBps);
         // collateralAmount is in USDC (6 dec); any non-zero amount accepted — buyer sizes their own exposure
         if (collateralAmount == 0) revert CollateralInsufficient(1, 0);
 
@@ -460,6 +576,8 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         lpDCollateralVault[posId]  = collateralAmount;
         pos.lpDHolder              = msg.sender;
         pos.feeShareBpsLPD         = feeShareBpsLPD;
+        pos.ilCoverageBps          = ilCoverageBps;
+        pos.maxIL                  = uint128(_computeMaxILCeil(pos.entrySqrtPrice, pos.tickLower, pos.tickUpper, pos.liquidity));
         pos.lpDSold                = true;
 
         IERC20(USDC).transferFrom(msg.sender, address(this), collateralAmount);
@@ -487,9 +605,10 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         pos.settled = true;
 
         if (ilRaw < 0) {
-            uint256 ilAbs   = uint256(-ilRaw);
-            uint256 ilCost  = (ilAbs * vault) / WAD;
-            if (ilCost > vault) ilCost = vault;
+            uint256 ilAbs  = uint256(-ilRaw);
+            uint256 ilCost = (pos.maxIL == 0 || ilAbs >= pos.maxIL)
+                ? vault
+                : (vault * ilAbs) / pos.maxIL;
             uint256 remainder = vault - ilCost;
 
             lpYCompensation[posId] = ilCost;

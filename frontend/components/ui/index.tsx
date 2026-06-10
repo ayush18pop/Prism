@@ -22,7 +22,7 @@ export function TokenPill({ variant }: TokenPillProps) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 5,
-      padding: '3px 8px', borderRadius: 100,
+      padding: '3px 8px',
       background: map.bg, border: `1px solid ${map.border}`,
       fontSize: 11, fontWeight: 500, letterSpacing: '0.06em',
       color: map.dot, lineHeight: 1,
@@ -115,7 +115,7 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 5,
-      padding: '3px 8px', borderRadius: 100,
+      padding: '3px 8px',
       background: s.bg, border: `1px solid ${s.border}`,
       fontSize: 11, fontWeight: 500, color: s.color,
     }}>

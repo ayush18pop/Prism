@@ -11,7 +11,7 @@ import { useStandingBid } from '@/hooks/useStandingBid'
 import { formatTimeAgo } from '@/lib/format'
 
 const POSITION_OPENED = parseAbiItem(
-  'event PositionOpened(bytes32 indexed posId, uint160 entrySqrtPrice, int24 tickLower, int24 tickUpper, uint256 collateral)'
+  'event PositionOpened(bytes32 indexed posId, uint160 entrySqrtPrice, int24 tickLower, int24 tickUpper, uint256 ilCoverageBps, uint256 collateral)'
 )
 
 interface PoolEvent {
@@ -158,7 +158,8 @@ export default function PoolPage() {
 
         {/* LEFT: Educational card */}
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', padding: 32 }}>
-          <h2 className="text-heading" style={{ color: 'var(--text-primary)', marginBottom: 8 }}>
+          <div className="spectrum-bar" style={{ marginBottom: 16, maxWidth: 64 }} />
+          <h2 className="text-display" style={{ color: 'var(--text-primary)', marginBottom: 8 }}>
             Every deposit, automatically split.
           </h2>
           <p className="text-body" style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>

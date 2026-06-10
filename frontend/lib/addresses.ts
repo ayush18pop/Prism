@@ -1,19 +1,18 @@
-// Deployed on Unichain Sepolia — block 53895363
+// Deployed on Unichain Sepolia — block 54240730
 // Pool: USDC/PRISM, fee=500 (0.05%), tickSpacing=10
-// Pool initialized at sqrtPriceX96 = Q96 (tick 0) — 1 PRISM = 1 USDC (both 6 decimals)
 const deployments = {
-  PrismHook:     '0xB83Ce21DBb0C9105C809510858290eD0da82C700',
-  LPYToken:      '0xD2Fd92e7Ef69Dfd0A605d7AEfbb16F9e71Fd7D05',
-  LPDToken:      '0xD77841A368ACD5Fd01610D0c8f25081BBf8ff550',
-  PrismCallback: '0xAdBCc05DC97c76626e7A2731416745A1CdF98990',
-  PrismRouter:   '0x749456188Be970c02dC3C512ecBe1ea53C12262D',
+  PrismHook:     '0xbE169aD708CEA009236943607980DF7Ec8ec4700',
+  LPYToken:      '0xf3077cCFBE8Be2cAAb7C5B763858e49b87f44513',
+  LPDToken:      '0xd2AC3dB3021ea25d4D40Df5EF7764Aac10D87F3E',
+  PrismCallback: '0x7cad80B54FEc3bEBf932688FDCdbD3926eedb1e1',
+  PrismRouter:   '0xEdeDe6bBf1998172E42080276D5a05134eCa9636',
   USDC:          '0x31d0220469e10c4E71834a79b1f276d740d3768F',
   WETH:          '0x4200000000000000000000000000000000000006',
   PRISM:         '0xCf864db2623735b28BEC4863490e19b13C7B1a5F',
   PoolManager:   '0x00B036B58a818B1BC34d502D3fE730Db729e62AC',
-  PrismRSC:      '0x430e2F332fFe1BC5eFa3C54360fE9aC704EEaff7',
-  poolId:        '0xbde6c9ece59c121bd0a4edc4a112d5b7d3416f81db4943dfe1ebc0dddb858208',
-  deployBlock:   53895363,
+  PrismRSC:      '0xd42dbe0b1373B0FBBb78E01a9489362187858a7f',
+  poolId:        '0xa072e8c53693e3ad8ee2242ecbdad917c083bbf616328a4e2556fd73f72a8773',
+  deployBlock:   54240730,
 }
 
 function addr(s: string): `0x${string}` | undefined {

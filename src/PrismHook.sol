@@ -352,18 +352,27 @@ contract PrismHook is IHooks, ImmutableState, Ownable, ReentrancyGuard, Pausable
         (uint160 sqrtPriceCurrent,,,) = StateLibrary.getSlot0(poolManager, key.toId());
         int256 ilRaw = ILMath._computeIL(pos.entrySqrtPrice, sqrtPriceCurrent, pos.liquidity);
 
-        if (pos.lpDSold && ilRaw < 0) {
+        if (pos.lpDSold) {
             uint256 vault = lpDCollateralVault[posId];
-            uint256 ilAbs = uint256(-ilRaw);
-            // Vault was sized at deposit to cover maxIL. Draw proportionally:
-            // ilCost = vault * (currentIL / maxIL), capped at vault.
-            // If maxIL==0 (position opened before this fix), treat as full draw.
-            uint256 ilCost = (pos.maxIL == 0 || ilAbs >= pos.maxIL)
-                ? vault
-                : (vault * ilAbs) / pos.maxIL;
+            // Draw IL from the vault (only when price moved against the LP).
+            uint256 ilCost = 0;
+            if (ilRaw < 0) {
+                uint256 ilAbs = uint256(-ilRaw);
+                // Vault was sized at deposit to cover maxIL. Draw proportionally:
+                // ilCost = vault * (currentIL / maxIL), capped at vault.
+                // If maxIL==0 (position opened before this fix), treat as full draw.
+                ilCost = (pos.maxIL == 0 || ilAbs >= pos.maxIL)
+                    ? vault
+                    : (vault * ilAbs) / pos.maxIL;
+            }
 
-            lpDCollateralVault[posId] -= ilCost;
-            lpYCompensation[posId]     = ilCost;
+            // CEI: zero the vault, then stage both halves for pull-based claims.
+            // Mirror settleLPD exactly — the remainder must land in lpDClaimable so
+            // the LP-D holder can withdraw it. Never push USDC from inside this
+            // PoolManager-locked callback (reentrancy surface).
+            lpDCollateralVault[posId] = 0;
+            lpYCompensation[posId]    = ilCost;
+            lpDClaimable[posId]       = vault - ilCost;
         }
 
         return IHooks.beforeRemoveLiquidity.selector;

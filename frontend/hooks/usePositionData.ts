@@ -20,22 +20,23 @@ export function usePositionData(
   currentSqrtPrice: bigint,
   currentTick: number,
 ) {
+  const hook = ADDRESSES.PrismHook
   const tokenId = posId ? BigInt(`0x${posId.slice(2)}`) : undefined
 
   const { data: pos, isLoading: posLoading } = useReadContract({
-    address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'getPosition',
+    address: hook, abi: PRISM_HOOK_ABI, functionName: 'getPosition',
     args: posId ? [posId] : undefined, chainId: 1301,
-    query: { enabled: !!posId && !!ADDRESSES.PrismHook, refetchInterval: 5_000 },
+    query: { enabled: !!posId && !!hook, refetchInterval: 5_000 },
   })
 
   const { data: vault } = useReadContract({
-    address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'lpDCollateralVault',
+    address: hook, abi: PRISM_HOOK_ABI, functionName: 'lpDCollateralVault',
     args: posId ? [posId] : undefined, chainId: 1301,
     query: { enabled: !!posId, refetchInterval: 5_000 },
   })
 
   const { data: ilComp } = useReadContract({
-    address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'lpYCompensation',
+    address: hook, abi: PRISM_HOOK_ABI, functionName: 'lpYCompensation',
     args: posId ? [posId] : undefined, chainId: 1301,
     query: { enabled: !!posId, refetchInterval: 5_000 },
   })
@@ -53,7 +54,7 @@ export function usePositionData(
   })
 
   const { data: lpdFees } = useReadContract({
-    address: ADDRESSES.PrismHook, abi: PRISM_HOOK_ABI, functionName: 'lpDFeesClaimable',
+    address: hook, abi: PRISM_HOOK_ABI, functionName: 'lpDFeesClaimable',
     args: posId ? [posId] : undefined, chainId: 1301,
     query: { enabled: !!posId, refetchInterval: 5_000 },
   })

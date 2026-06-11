@@ -963,6 +963,36 @@ contract PrismHookTest is Test {
         }
     }
 
+    // Test: LP-D remainder is claimable after the LP exits via removeLiquidity.
+    // Regression for the stranded-collateral bug: beforeRemoveLiquidity drew IL into
+    // lpYCompensation but left the remainder in lpDCollateralVault, which claimLPDCollateral
+    // (which pays from lpDClaimable) could never reach. The exit path must mirror settleLPD
+    // and stage the remainder into lpDClaimable. Here price is unchanged → zero IL → the
+    // entire vault is the remainder, so the LP-D holder must be able to reclaim all of it.
+    function test_exitViaRemove_lpDSold_remainderClaimableByHolder() public {
+        vm.prank(bidder);
+        hook.setStandingBid(poolId, WAD, 3000, 10000, 50_000e6);
+
+        bytes32 posId = _deposit(TICK_LOWER, TICK_UPPER, 1e18);
+        uint256 vault = hook.lpDCollateralVault(posId);
+        assertGt(vault, 0, "vault funded at fill");
+        assertEq(hook.getPosition(posId).lpDHolder, bidder, "bidder holds LP-D");
+
+        // Exit with price at entry: zero IL means the full vault is the remainder.
+        _remove(posId, TICK_LOWER, TICK_UPPER, 1e18);
+
+        assertEq(hook.lpDCollateralVault(posId), 0,     "vault zeroed on exit");
+        assertEq(hook.lpYCompensation(posId),    0,     "no IL, no LP-Y compensation");
+        assertEq(hook.lpDClaimable(posId),       vault, "full vault staged as LP-D claimable");
+
+        // The pull must now succeed where it previously reverted NoClaimableCollateral.
+        uint256 balBefore = usdc.balanceOf(bidder);
+        vm.prank(bidder);
+        hook.claimLPDCollateral(posId);
+        assertEq(usdc.balanceOf(bidder), balBefore + vault, "holder reclaimed full remainder");
+        assertEq(hook.lpDClaimable(posId), 0, "claimable zeroed after pull");
+    }
+
     // Test 35: 70% coverage bid locks less USDC per fill than 100% coverage
     function test_standingBid_partialCoverage_locksLessUSDC() public {
         uint256 maxCollateral = 50_000e6;

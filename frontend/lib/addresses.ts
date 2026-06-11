@@ -1,19 +1,19 @@
-// Deployed on Unichain Sepolia — block 54330200
+// Deployed on Unichain Sepolia — block 54347616 (June 11 redeploy: stranded-collateral fix)
 // Pool: USDC/PRISM, fee=3000 (0.30%), tickSpacing=60
 // PrismCallback authorized sender: 0x9299472A6399Fd1027ebF067571Eb3e3D7837FC4 (Reactive proxy)
 const deployments = {
-  PrismHook:     '0x1cB5414b574B0656106B45B2e6041d8b49888700',
-  LPYToken:      '0x6C0a9eb9D33E332166Aa9C44a9707D9970dB2d32',
-  LPDToken:      '0xD16054C70838f4ec19a56dF6147C961B357FC7DD',
-  PrismCallback: '0xbe8C73ab1C3C7F85630f1a9a72208d63dd89a141',
-  PrismRouter:   '0xF80B02D03318386b9f11cf4B2b38724451D37215',
+  PrismHook:     '0x77D7dE89E589955aD9f0bF2d96109bA3bfC28700',
+  LPYToken:      '0xAc03a4479f8145CC6aA309462dB67F37988e551E',
+  LPDToken:      '0xE1bE73219fC9D920351272daf40258E1107127C2',
+  PrismCallback: '0x8bc8F38d45eE60cAA22c9d492b39D1b8B302b595',
+  PrismRouter:   '0x3837455C10d6589F0B64E27458832DEaa348d266',
   USDC:          '0x1f30D01D1766F26e62f8Aa7Dd5703a57E53183A3',
   WETH:          '0x4200000000000000000000000000000000000006',
   PRISM:         '0xCf864db2623735b28BEC4863490e19b13C7B1a5F',
   PoolManager:   '0x00B036B58a818B1BC34d502D3fE730Db729e62AC',
-  PrismRSC:      '0xc1d8ef36eB9b741524A5F5F1B20C16AE040ffF03',
-  poolId:        '0x86b55a7698f75fab1b711dfbbb76a598426296b2218abd38c10b2dae2f98e4f0',
-  deployBlock:   54330200,
+  PrismRSC:      '0xd4ae7009f8B60685DEAA1a827670ce5F6Cc8c441',
+  poolId:        '0xba158a56ddd8704ba64386fa841a07a7f9d7065db4e314fbdd4b04eac57c936f',
+  deployBlock:   54347616,
 }
 
 function addr(s: string): `0x${string}` | undefined {

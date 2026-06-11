@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { useAccount } from 'wagmi'
+import { useAccount, useWriteContract, usePublicClient } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { toast } from 'sonner'
 import { ADDRESSES } from '@/lib/addresses'
+import { PRISM_HOOK_ABI } from '@/lib/abis'
 import { SectionLabel, StatusBadge, TokenPill, AddressChip } from '@/components/ui/index'
 import { StandingBidForm } from '@/components/lpd/StandingBidForm'
 import { MyBids } from '@/components/lpd/MyBids'
@@ -244,11 +246,36 @@ function LpdPositionCard({
   tick: number
 }) {
   const pos = usePositionData(posId, account, sqrtPriceX96, tick)
+  const { writeContractAsync } = useWriteContract()
+  const client = usePublicClient({ chainId: 1301 })
+  const [claiming, setClaiming] = useState(false)
 
   if (!pos.exists || pos.isLoading) return null
-  if (pos.lpDHolder?.toLowerCase() !== account.toLowerCase()) return null // not our LP-D
+  if (pos.lpDHolder?.toLowerCase() !== account.toLowerCase()) return null
 
   const { tickLower, tickUpper, inRange, settled, collateralVault, currentIL, currentILIsNegative } = pos
+  const hasClaimableCollateral = settled && collateralVault !== '$0.00' && collateralVault !== '--'
+
+  async function claimCollateral() {
+    if (!ADDRESSES.PrismHook || !client) return
+    setClaiming(true)
+    try {
+      const hash = await writeContractAsync({
+        address: ADDRESSES.PrismHook,
+        abi: PRISM_HOOK_ABI,
+        functionName: 'claimLPDCollateral',
+        args: [posId],
+        chainId: 1301,
+      })
+      await client.waitForTransactionReceipt({ hash })
+      toast.success('Collateral claimed', { description: collateralVault + ' returned to your wallet' })
+    } catch (e: unknown) {
+      const msg = (e as { shortMessage?: string; message: string }).shortMessage ?? (e as Error).message
+      toast.error('Claim failed', { description: msg.slice(0, 120) })
+    } finally {
+      setClaiming(false)
+    }
+  }
 
   return (
     <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}>
@@ -279,6 +306,29 @@ function LpdPositionCard({
           </div>
         ))}
       </div>
+
+      {/* Claim collateral — shown only when settled with remaining vault */}
+      {hasClaimableCollateral && (
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span className="text-small" style={{ color: 'var(--text-secondary)' }}>
+            Remaining collateral available to withdraw
+          </span>
+          <button
+            onClick={claimCollateral}
+            disabled={claiming}
+            style={{
+              padding: '8px 20px', fontSize: 12, fontWeight: 500,
+              background: claiming ? 'var(--bg-raised)' : 'var(--vault-base)',
+              border: '1px solid var(--vault-base)',
+              color: claiming ? 'var(--text-secondary)' : 'var(--bg-base)',
+              cursor: claiming ? 'not-allowed' : 'pointer',
+              transition: 'background 150ms, color 150ms',
+            }}
+          >
+            {claiming ? 'Claiming…' : `Claim ${collateralVault}`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

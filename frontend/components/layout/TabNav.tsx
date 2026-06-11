@@ -9,6 +9,7 @@ const TABS = [
   { label: 'Provide', href: '/app/provide' },
   { label: 'Trade',   href: '/app/trade' },
   { label: 'LP-D',    href: '/app/lpd' },
+  { label: 'Faucet',  href: '/app/faucet' },
 ]
 
 const TAB_ACCENT: Record<string, { bg: string; border: string; color: string }> = {

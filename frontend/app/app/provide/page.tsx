@@ -92,7 +92,7 @@ export default function ProvidePage() {
 
         {/* ── RIGHT: positions ───────────────────────────────── */}
         <div>
-          <SectionLabel label={`YOUR POSITIONS ${positions.length > 0 ? `(${positions.length})` : ''}`} />
+          <SectionLabel label="YOUR POSITIONS" />
 
           {!isConnected ? (
             <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', padding: '32px', textAlign: 'center' }}>
@@ -127,21 +127,30 @@ export default function ProvidePage() {
                 />
               ))}
 
+              {/* Active positions empty state — rendered before settled toggle */}
+              <div id="active-positions-empty-hint" style={{ display: 'none' }}>
+                {/* placeholder — overridden by JS below if needed */}
+              </div>
+
               {/* Settled positions toggle */}
-              <button
-                onClick={() => setShowSettled(s => !s)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
-                  cursor: 'pointer', padding: '8px 0', width: '100%',
-                  fontSize: 11, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase',
-                  color: 'var(--text-tertiary)', transition: 'color 150ms',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-tertiary)' }}
-              >
-                <span style={{ display: 'inline-block', transition: 'transform 200ms', transform: showSettled ? 'rotate(90deg)' : 'none' }}>›</span>
-                {showSettled ? 'Hide settled positions' : 'Show settled positions'}
-              </button>
+              {positions.length > 0 && (
+                <button
+                  onClick={() => setShowSettled(s => !s)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
+                    cursor: 'pointer', padding: '8px 0', width: '100%',
+                    fontSize: 11, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase',
+                    color: 'var(--text-tertiary)', transition: 'color 150ms',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-tertiary)' }}
+                >
+                  <span style={{ display: 'inline-block', transition: 'transform 200ms', transform: showSettled ? 'rotate(90deg)' : 'none' }}>›</span>
+                  {showSettled
+                    ? `Hide ${positions.length} settled position${positions.length !== 1 ? 's' : ''}`
+                    : `Show ${positions.length} settled position${positions.length !== 1 ? 's' : ''}`}
+                </button>
+              )}
 
               {/* Settled positions — only rendered when expanded */}
               {showSettled && positions.map(({ posId }) => (

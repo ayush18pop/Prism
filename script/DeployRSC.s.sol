@@ -35,6 +35,8 @@ contract DeployRSC is Script {
 
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
 
+        address deployer = vm.envAddress("DEPLOYER_ADDRESS");
+
         // Send 1 lREACT with deployment so the RSC can afford the subscribe() calls
         // in its constructor. The system contract at 0xfffFfF deducts from the RSC's
         // own balance, not the deployer's balance.
@@ -42,7 +44,8 @@ contract DeployRSC is Script {
             callbackContract,
             prismHook,
             poolManager,
-            watchedPoolId
+            watchedPoolId,
+            deployer  // must match deployer of PrismCallback (same wallet → rvm_id check passes)
         );
 
         vm.stopBroadcast();

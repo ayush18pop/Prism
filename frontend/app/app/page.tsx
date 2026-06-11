@@ -87,7 +87,7 @@ export default function PoolPage() {
     { key: 'price', label: 'POOL PRICE', value: loaded ? priceFormatted : '--', mono: true, large: true },
     { key: 'tick',  label: 'TICK',       value: loaded ? String(tick) : '--',    mono: true, large: false },
     { key: 'pair',  label: 'PAIR',       value: 'USDC / PRISM',                 mono: true, large: false },
-    { key: 'fee',   label: 'FEE',        value: '0.05%',                        mono: true, large: false },
+    { key: 'fee',   label: 'FEE',        value: '0.30%',                        mono: true, large: false },
   ]
 
   return (

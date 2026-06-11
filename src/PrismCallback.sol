@@ -6,49 +6,48 @@ import {Ownable}          from "@openzeppelin/contracts/access/Ownable.sol";
 import {PrismHook}        from "./PrismHook.sol";
 
 /// @title PrismCallback
-/// @notice Receives RSC callbacks from Lasna and forwards settlement calls to PrismHook.
+/// @notice Receives RSC callbacks from the Reactive Network proxy and forwards settlement
+///         calls to PrismHook.
 ///
 /// Security model:
-/// - `authorizedRSC` is set via setAuthorizedRSC (owner-only, callable once).
-///   This pattern breaks the immutability guarantee but is necessary for testnet
-///   deployment where the RSC address isn't known until after callback is deployed.
-/// - `AbstractCallback` further restricts callers via its `addAuthorizedSender` list.
+/// - `AbstractCallback(_callbackSender)` authorizes the Reactive Network proxy address
+///   on Unichain Sepolia — the address that actually delivers cross-chain callbacks.
+///   This is NOT the RSC address on Lasna.
+/// - `authorizedSenderOnly` (from AbstractPayer) verifies msg.sender is that proxy.
+/// - The leading `address` param in callbacks is the RVM ID Reactive prepends; it is
+///   verified by `rvmIdOnly` against the deployer stored in AbstractCallback.rvm_id.
 contract PrismCallback is AbstractCallback, Ownable {
     PrismHook public immutable hook;
 
-    // The RVM sender address authorized to deliver callbacks from the RSC on Lasna.
-    // Set once via setAuthorizedRSC; zero until set.
-    address public authorizedRSC;
-
     error UnauthorizedCallback(address caller);
-    error AlreadySet();
 
-    constructor(address _hook, address initialOwner)
-        AbstractCallback(address(0))
+    /// @param _hook            PrismHook address on Unichain Sepolia.
+    /// @param _callbackSender  Reactive Network proxy address on Unichain Sepolia.
+    ///                         Find at https://dev.reactive.network/ under "Deployed contracts".
+    /// @param initialOwner     Contract owner (for Ownable).
+    constructor(address _hook, address _callbackSender, address initialOwner)
+        AbstractCallback(_callbackSender)
         Ownable(initialOwner)
     {
         hook = PrismHook(payable(_hook));
     }
 
-    /// @notice Set the authorized RSC address (callable once, owner only).
-    function setAuthorizedRSC(address rsc) external onlyOwner {
-        if (authorizedRSC != address(0)) revert AlreadySet();
-        authorizedRSC = rsc;
-    }
-
-    /// @notice Called by the Reactive Network proxy when the RSC fires a price-reversion event.
-    ///         Condition 1: price has returned to within X% of entry — settle LP-D to
-    ///         return collateral to the bidder (position recovered, no IL to pay).
-    function onPriceReversion(bytes32 posId) external {
-        if (msg.sender != authorizedRSC) revert UnauthorizedCallback(msg.sender);
+    /// @notice Condition 1 — price has returned to within REVERSION_BPS of entry.
+    ///         Reactive prepends the deployer address as `_rvmId`; verified by rvmIdOnly.
+    function onPriceReversion(address _rvmId, bytes32 posId)
+        external
+        authorizedSenderOnly
+        rvmIdOnly(_rvmId)
+    {
         hook.settleLPD(posId);
     }
 
-    /// @notice Called when collateral utilisation exceeds the 90% liquidation threshold.
-    ///         Condition 3: IL has consumed >= 90% of the vault — force-settle before
-    ///         the vault is fully depleted.
-    function onLiquidationThreshold(bytes32 posId) external {
-        if (msg.sender != authorizedRSC) revert UnauthorizedCallback(msg.sender);
+    /// @notice Condition 3 — IL >= 90% of vault; force-settle before insolvency.
+    function onLiquidationThreshold(address _rvmId, bytes32 posId)
+        external
+        authorizedSenderOnly
+        rvmIdOnly(_rvmId)
+    {
         hook.settleLPD(posId);
     }
 }

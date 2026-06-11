@@ -31,7 +31,7 @@ export default function LpdPage() {
   const { sqrtPriceX96, tick } = usePoolPrice()
   const { positions } = usePositionList(address)
   const isCorrectNetwork = chainId === 1301
-  const [selectedPoolIdx, setSelectedPoolIdx] = useState(1) // default: 0.05%
+  const [selectedPoolIdx, setSelectedPoolIdx] = useState(2) // default: 0.30%
 
   const selectedPool = POOL_CONFIGS[selectedPoolIdx]
   const poolStatus = usePoolInitialized(selectedPool?.poolId)

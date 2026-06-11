@@ -203,7 +203,7 @@ export function SwapForm() {
 
       {/* Meta */}
       <div style={{ display: 'flex', gap: 12 }}>
-        {['0.5% slippage', 'Fee 0.05%'].map(s => (
+        {['0.5% slippage', 'Fee 0.30%'].map(s => (
           <span key={s} style={{ fontSize: 11, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono,"JetBrains Mono",monospace)' }}>{s}</span>
         ))}
       </div>

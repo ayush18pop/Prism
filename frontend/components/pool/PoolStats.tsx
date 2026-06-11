@@ -56,8 +56,8 @@ export function PoolStats({ poolId: _poolId }: PoolStatsProps) { // eslint-disab
 
         <StatCell label="Fee Tier">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-sm text-white">0.01%</span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] text-violet-400 bg-violet-500/10 border border-violet-500/20">tick 1</span>
+            <span className="font-mono text-sm text-white">0.30%</span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] text-violet-400 bg-violet-500/10 border border-violet-500/20">tick 60</span>
           </div>
         </StatCell>
       </div>

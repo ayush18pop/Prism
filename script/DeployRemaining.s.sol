@@ -15,7 +15,8 @@ contract DeployRemaining is Script {
 
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
 
-        PrismCallback callback = new PrismCallback(hook, deployer);
+        address callbackSender = vm.envAddress("REACTIVE_CALLBACK_SENDER");
+        PrismCallback callback = new PrismCallback(hook, callbackSender, deployer);
         console.log("PrismCallback:", address(callback));
 
         PrismRouter router = new PrismRouter(IPoolManager(pmAddr));

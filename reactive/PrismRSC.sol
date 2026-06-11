@@ -56,6 +56,9 @@ contract PrismRSC is AbstractReactive {
     address public immutable prismHook;         // PrismHook on Unichain Sepolia
     address public immutable poolManager;       // PoolManager on Unichain Sepolia
     bytes32 public immutable watchedPoolId;     // pool to monitor
+    // Deployer address passed as rvm_id in callbacks.
+    // Must match the deployer of PrismCallback (AbstractCallback stores msg.sender as rvm_id).
+    address public immutable deployer;
 
     // ── position tracking ────────────────────────────────────────────────────
 
@@ -83,12 +86,14 @@ contract PrismRSC is AbstractReactive {
         address _callbackContract,
         address _prismHook,
         address _poolManager,
-        bytes32 _watchedPoolId
+        bytes32 _watchedPoolId,
+        address _deployer
     ) payable{
         callbackContract = _callbackContract;
         prismHook        = _prismHook;
         poolManager      = _poolManager;
         watchedPoolId    = _watchedPoolId;
+        deployer         = _deployer;
 
         if (!vm) {
             // try/catch: the Lasna system precompile doesn't exist in forge's local EVM,
@@ -181,11 +186,13 @@ contract PrismRSC is AbstractReactive {
 
         if (priceReverted) {
             pos.active = false;
+            // Reactive prepends the deployer address (rvm_id) as the first param.
+            // PrismCallback.rvmIdOnly verifies it matches the callback contract's deployer.
             emit IReactive.Callback(
                 UNICHAIN_SEPOLIA_CHAIN_ID,
                 callbackContract,
                 300_000,
-                abi.encodeWithSignature("onPriceReversion(bytes32)", posId)
+                abi.encodeWithSignature("onPriceReversion(address,bytes32)", deployer, posId)
             );
             return;
         }
@@ -203,7 +210,7 @@ contract PrismRSC is AbstractReactive {
                     UNICHAIN_SEPOLIA_CHAIN_ID,
                     callbackContract,
                     300_000,
-                    abi.encodeWithSignature("onLiquidationThreshold(bytes32)", posId)
+                    abi.encodeWithSignature("onLiquidationThreshold(address,bytes32)", deployer, posId)
                 );
             }
         }

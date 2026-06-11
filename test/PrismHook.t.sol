@@ -24,6 +24,7 @@ import {PositionId} from "../src/lib/PositionId.sol";
 import {LPYToken}   from "../src/LPYToken.sol";
 import {LPDToken}   from "../src/LPDToken.sol";
 import {PrismHook}  from "../src/PrismHook.sol";
+import {PrismRouter} from "../src/PrismRouter.sol";
 import {MockUSDC}   from "./MockUSDC.sol";
 
 contract MockToken18 is ERC20 {
@@ -55,6 +56,7 @@ contract PrismHookTest is Test {
     PoolManager             poolManager;
     PoolModifyLiquidityTest modifyRouter;
     PoolSwapTest            swapRouter;
+    PrismRouter             prismRouter;
     MockToken18             tokenA;  // 18-decimal pool token
     MockToken18             tokenB;  // 18-decimal pool token
     MockUSDC                usdc;    // 6-decimal collateral token (NOT a pool token)
@@ -82,6 +84,7 @@ contract PrismHookTest is Test {
         poolManager  = new PoolManager(owner);
         modifyRouter = new PoolModifyLiquidityTest(poolManager);
         swapRouter   = new PoolSwapTest(poolManager);
+        prismRouter  = new PrismRouter(poolManager);
 
         usdc   = new MockUSDC();
         tokenA = new MockToken18("Token A", "TKNA");
@@ -136,6 +139,8 @@ contract PrismHookTest is Test {
         tokenB.approve(address(modifyRouter), type(uint256).max);
         tokenA.approve(address(swapRouter),   type(uint256).max);
         tokenB.approve(address(swapRouter),   type(uint256).max);
+        tokenA.approve(address(prismRouter),  type(uint256).max);
+        tokenB.approve(address(prismRouter),  type(uint256).max);
 
         // fund test contract + bidder with USDC for collateral
         usdc.mint(address(this), 10_000_000e6);
@@ -221,6 +226,41 @@ contract PrismHookTest is Test {
         assertTrue(posAfter.settled, "position must be settled");
         assertEq(hook.lpYCompensation(posId), 0, "no IL compensation staged");
         assertEq(lpDCollateralVault(posId), 0,   "vault remains zero");
+    }
+
+    function test_prismRouter_removeLiquidity_returnsBothPoolTokens() public {
+        bytes32 posId = PositionId.positionId(poolId, address(this), TICK_LOWER, TICK_UPPER, block.number);
+
+        prismRouter.addLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({
+                tickLower:      TICK_LOWER,
+                tickUpper:      TICK_UPPER,
+                liquidityDelta: 1e18,
+                salt:           bytes32(0)
+            })
+        );
+
+        assertGt(lpYToken.balanceOf(address(this), uint256(posId)), 0, "LP-Y minted to LP");
+
+        ERC20 token0 = ERC20(Currency.unwrap(currency0));
+        ERC20 token1 = ERC20(Currency.unwrap(currency1));
+        uint256 token0Before = token0.balanceOf(address(this));
+        uint256 token1Before = token1.balanceOf(address(this));
+
+        prismRouter.removeLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({
+                tickLower:      TICK_LOWER,
+                tickUpper:      TICK_UPPER,
+                liquidityDelta: -1e18,
+                salt:           bytes32(0)
+            }),
+            posId
+        );
+
+        assertGt(token0.balanceOf(address(this)), token0Before, "currency0 returned");
+        assertGt(token1.balanceOf(address(this)), token1Before, "currency1 returned");
     }
 
     // -- test 2: Settlement Case 2 — LP-D sold, IL drawn from collateral ------

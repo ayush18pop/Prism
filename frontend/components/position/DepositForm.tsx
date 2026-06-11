@@ -13,11 +13,11 @@ const MAX_APPROVE = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffff
 const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000' as const
 const Q96 = 2n ** 96n
 
-// Fee tiers — only fee=500 (0.05%) is deployed on this testnet
+// Fee tiers — only fee=3000 (0.30%) is deployed on this testnet
 const FEE_TIERS = [
   { label: '0.01%', fee: 100,   tickSpacing: 1,   deployed: false },
-  { label: '0.05%', fee: 500,   tickSpacing: 10,  deployed: true  },
-  { label: '0.30%', fee: 3000,  tickSpacing: 60,  deployed: false },
+  { label: '0.05%', fee: 500,   tickSpacing: 10,  deployed: false },
+  { label: '0.30%', fee: 3000,  tickSpacing: 60,  deployed: true  },
   { label: '1.00%', fee: 10000, tickSpacing: 200, deployed: false },
 ] as const
 
@@ -87,7 +87,7 @@ export function DepositForm() {
   const client = usePublicClient({ chainId: 1301 })
   const { writeContractAsync: write } = useWriteContract()
 
-  const [selectedFee, setSelectedFee] = useState<100 | 500 | 3000 | 10000>(500)
+  const [selectedFee, setSelectedFee] = useState<100 | 500 | 3000 | 10000>(3000)
   const activeTier = FEE_TIERS.find(t => t.fee === selectedFee)!
 
   // Build pool key from selected fee tier

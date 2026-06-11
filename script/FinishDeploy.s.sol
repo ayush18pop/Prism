@@ -22,7 +22,8 @@ contract FinishDeploy is Script {
 
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
 
-        PrismCallback callback = new PrismCallback(hookAddr, deployer);
+        address callbackSender = vm.envAddress("REACTIVE_CALLBACK_SENDER");
+        PrismCallback callback = new PrismCallback(hookAddr, callbackSender, deployer);
         console.log("PrismCallback:", address(callback));
 
         PrismHook(payable(hookAddr)).setCallbackContract(address(callback));

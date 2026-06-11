@@ -2,9 +2,30 @@
 
 **LP yield without impermanent loss.**
 
-> _"Pendle for Uniswap LP positions."_
+A Uniswap v4 hook that splits every LP deposit into a yield token and a risk token — and runs a live market between them, inside the pool itself.
 
-Built for UHI9 Hookathon · Unichain Sepolia · Reactive Network
+Built for UHI9 Hookathon · Live on Unichain Sepolia · Automated by Reactive Network
+
+**Live app: [prism.ayush.works](https://prism.ayush.works/)**
+
+---
+
+## 30-second version (for judges)
+
+- Every LP deposit is split into **LP-Y** (earns all swap fees, zero IL) and **LP-D** (absorbs all IL, earns a fee share, backed by USDC collateral).
+- Protocols **bid for LP-D** on an on-chain order book. When an LP deposits, the hook fills the best bid **atomically in the same transaction** — split, match, collateral lock, one tx.
+- On exit, the hook computes IL **oracle-free** (entry vs. exit sqrtPrice, read straight from the pool) and pays it from the buyer's collateral vault. The LP walks away whole.
+- An **RSC on Reactive Network** watches every swap cross-chain and auto-settles LP-D positions when price reverts through entry — no keepers, no cron.
+- **66/66 Foundry tests passing. 6 contracts across 2 chains. Fully deployed, full dApp at [prism.ayush.works](https://prism.ayush.works/).**
+
+Same pool, same −25% price move:
+
+| | Standard LP | LP-Y holder (Prism) |
+| --- | ---: | ---: |
+| Principal returned | $3,680.00 | $4,000.00 |
+| Impermanent loss | **−$320.00** | **$0.00** (paid by LP-D vault) |
+| Fees earned | +$12.00 | +$12.00 |
+| **Net** | **$3,372.00** | **$4,012.00** |
 
 ---
 
@@ -15,38 +36,28 @@ Every Uniswap LP position bundles two completely different financial products:
 - **Fee yield** — income from swaps. Predictable. What LPs actually want.
 - **Delta exposure** — impermanent loss. Pure price risk. Nobody wants this.
 
-They've always been inseparable. Prism separates them.
+A 2021 study of 17,000 wallets found ~50% of Uniswap LPs underperformed simply holding. Meanwhile, protocols run liquidity mining programs — perpetual token emissions — to compensate LPs for exactly this risk. The moment emissions slow, TVL leaves. Rented liquidity.
 
----
-
-## Insight
-
-IL and fees come from the same position, but they're owned by different risk appetites.
-
-A yield-seeking LP wants fees and hates IL. A protocol treasury wants deep liquidity and can absorb IL on its own token. There's a trade waiting to happen — it just never had a venue.
-
-Prism is the venue.
+One side needs to offload IL. The other side is already paying to make it go away. There's never been a market between them. Prism is the venue.
 
 ---
 
 ## Mechanism
 
-On every deposit, Prism mints two ERC-1155 tokens:
+On every deposit, the hook mints two ERC-1155 tokens (tokenId = positionId):
 
-| Token    | What it represents                                            | Who wants it                        |
-| -------- | ------------------------------------------------------------- | ----------------------------------- |
-| **LP-Y** | 100% of swap fees, zero IL                                    | Retail LPs, yield seekers           |
-| **LP-D** | Absorbs 100% of IL, earns fee share, requires USDC collateral | Protocol treasuries, IL speculators |
+| Token | What it represents | Who wants it |
+| --- | --- | --- |
+| **LP-Y** | 100% of swap fees, zero IL | Retail LPs, yield seekers |
+| **LP-D** | Absorbs 100% of IL, earns a negotiated fee share, requires USDC collateral | Protocol treasuries, IL speculators |
 
 An LP who holds both tokens has standard LP exposure — the split is accounting clarity.
 
-An LP who sells LP-D immediately holds **pure fee yield with zero IL** — the delta was purchased by a willing counterparty.
+An LP whose LP-D is sold holds **pure fee yield with zero IL** — the delta was purchased by a willing counterparty, whose USDC sits locked in the hook.
 
----
+### The standing-bid market
 
-## Protocol-Owned LP-D
-
-A protocol treasury can buy LP-D from LPs in their own pool.
+A protocol calls `postBid` once: coverage level, fee share it wants in return, and a USDC budget (up to 20 active bids per pool). Every subsequent LP deposit auto-fills the best-scoring bid inside `afterAddLiquidity`:
 
 ```
 Old way:  Protocol emits 100,000 TOKEN/week
@@ -56,40 +67,40 @@ Old way:  Protocol emits 100,000 TOKEN/week
 Prism:    Protocol buys LP-D with USDC
           → LPs hold LP-Y (zero IL)
           → protocol absorbs own-token IL
-          → if price reverts, collateral returns
+          → if price reverts, collateral comes back
           → net cost = actual IL, not perpetual emissions
 ```
 
-A `postBid` call pre-deposits USDC once into an on-chain order book (up to 20 bids per pool). Every subsequent LP deposit automatically sells LP-D to the best-scoring bid in the same transaction — no second step, no manual negotiation.
+**Solvency guarantee:** a bid only fills if its collateral covers the *worst-case* IL for the deposit's full tick range (`cost ≥ maxIL`, computed at both tick boundaries). Underfunded bids are silently skipped — the LP keeps both tokens, the deposit never reverts.
 
 ---
 
-## Reactive Automation
+## Sponsor integrations
 
-`PrismRSC` on Reactive Network's Lasna testnet subscribes to two event streams from Unichain Sepolia:
+### Uniswap v4 hooks — the hook *is* the protocol
 
-1. **`PositionOpened`** — registers new LP-D positions
-2. **`Swap`** — on every swap, evaluates two conditions across all active positions
+- **`afterAddLiquidity`** — mints LP-Y/LP-D, matches the best standing bid, locks collateral. Atomic. In v3 this needs a wrapper contract LPs must opt into; in v4 it's invisible.
+- **`before/afterRemoveLiquidity`** — computes IL oracle-free and settles from the vault before the LP receives principal. The LP is made whole atomically.
+- **Lazy fee collection** via `modifyLiquidity(liquidityDelta=0)` — fee accounting without moving liquidity. No `afterSwap` hook, zero per-swap gas overhead. Permissions mask: `0x0700`.
 
-**Condition 1 — Price Reversion:** price returns within 1% of LP's entry → collateral returned to LP-D holder at a profit.
+### Reactive Network — settlement without keepers
 
-**Condition 2 — Liquidation Threshold:** IL reaches 90% of collateral vault → force-settle before LP-Y is left unprotected.
+**Where it's used (for sponsor judging):**
 
-No cron job. No keeper. No manual trigger. The settlement fires the moment the on-chain condition is met.
+- [`reactive/PrismRSC.sol`](https://github.com/ayush18pop/Prism/blob/main/reactive/PrismRSC.sol) — the Reactive Smart Contract. Extends `AbstractReactive`, subscribes to `PositionOpened` and `Swap` events from the Unichain Sepolia pool, and evaluates settlement conditions in `react()` on every swap.
+- [`src/PrismCallback.sol`](https://github.com/ayush18pop/Prism/blob/main/src/PrismCallback.sol) — the destination-chain callback receiver. Extends `AbstractCallback`; the authorized Reactive sender is immutable, set at construction.
+- Deployed RSC on Lasna: [`0xd4ae...c441`](https://lasna.reactscan.net/address/0xd4ae7009f8B60685DEAA1a827670ce5F6Cc8c441) — live, subscribed, firing.
 
----
+The RSC evaluates two conditions on every swap, across all active positions:
 
-## Why Uniswap v4 Hooks
+1. **Price reversion** — pool price returns within 1% of the LP's entry → the LP-D position auto-settles, collateral returns to the buyer at a profit. The buyer's upside is *guaranteed by infrastructure*, not by someone remembering to call a function.
+2. **Liquidation guard** — IL reaches 90% of the collateral vault → force-settle before LP-Y protection is exhausted.
 
-v4 hooks make Prism possible with three specific capabilities:
+Settlement fires via cross-chain callback (Lasna → Unichain Sepolia) the moment the condition is true on-chain. No keeper, no cron, no manual trigger — Reactive is not a bolt-on here; it's the only component that can watch prices *across blocks*, which a hook fundamentally cannot do from inside a single transaction.
 
-**`afterAddLiquidity`** — fires after every deposit, in the same transaction. This is where LP-Y and LP-D are minted, and where standing bids auto-fill. In v3 this would require a wrapper contract that LPs must know to use.
+### Why Unichain
 
-**`before/afterRemoveLiquidity`** — fires when an LP exits. This is where IL is computed and drawn from the collateral vault before the LP receives their principal back. The LP is made whole atomically.
-
-**Lazy fee collection via `modifyLiquidity(liquidityDelta=0)`** — v4 allows fee accounting without moving liquidity. Prism collects fees on-demand rather than hooking every swap, keeping gas overhead off the critical path.
-
-Without hooks, the LP-D sale and IL settlement would require 3–4 separate transactions. With hooks, it's one.
+On Ethereum mainnet, the gas for a settlement call exceeds the IL it recovers on small positions. ~1s blocks and sub-cent gas make Prism's economics work at any position size — a design requirement, not a demo convenience.
 
 ---
 
@@ -116,44 +127,52 @@ Protocol Wallet                         PrismCallback
 
 ---
 
-## Demo
+## Deployed contracts
 
-_GIF: deposit → LP-D auto-sold to standing bid → IL drops → RSC fires settlement → LP-Y holder claims USDC compensation_
+**Unichain Sepolia (chain ID 1301)** — deployed June 11 2026, block 54347616
 
-Live deployment: [Unichain Sepolia](https://unichain-sepolia.blockscout.com/address/0xbE169aD708CEA009236943607980DF7Ec8ec4700)
+| Contract | Address |
+| --- | --- |
+| PrismHook | [`0x77D7dE89E589955aD9f0bF2d96109bA3bfC28700`](https://unichain-sepolia.blockscout.com/address/0x77D7dE89E589955aD9f0bF2d96109bA3bfC28700) |
+| LPYToken | `0xAc03a4479f8145CC6aA309462dB67F37988e551E` |
+| LPDToken | `0xE1bE73219fC9D920351272daf40258E1107127C2` |
+| PrismCallback | `0x8bc8F38d45eE60cAA22c9d492b39D1b8B302b595` |
+| PrismRouter | `0x3837455C10d6589F0B64E27458832DEaa348d266` |
+| USDC (mock) | `0x1f30D01D1766F26e62f8Aa7Dd5703a57E53183A3` |
+| PRISM (mock) | `0xCf864db2623735b28BEC4863490e19b13C7B1a5F` |
+
+Demo pool: USDC/PRISM, fee 3000 (0.30%), tickSpacing 60 —
+poolId `0xba158a56ddd8704ba64386fa841a07a7f9d7065db4e314fbdd4b04eac57c936f`
+
+**Lasna (chain ID 5318007)**
+
+| Contract | Address |
+| --- | --- |
+| PrismRSC | [`0xd4ae7009f8B60685DEAA1a827670ce5F6Cc8c441`](https://lasna.reactscan.net/address/0xd4ae7009f8B60685DEAA1a827670ce5F6Cc8c441) |
 
 ---
 
-## Technical Details
+## Build, test, run
+
+```bash
+cd Prism
+forge build
+forge test -vvv          # 66/66 passing
+
+cd frontend
+npm install && npm run dev   # Next.js 14 + Wagmi v2 dApp
+```
+
+The 66 tests cover all 7 required settlement cases — including: LP holds both tokens (standard exit), LP-D sold then LP exits (IL drawn from vault), RSC force-settle, bid auto-fill, underfunded-bid silent skip, IL compensation following an LP-Y transfer, and positionId collision resistance. Tests assert invariants (CEI ordering, idempotent settlement, auth guards), not just outputs.
+
+Demo walkthrough with copy-paste commands: [`RUNBOOK.md`](RUNBOOK.md)
+
+---
+
+## Technical highlights
 
 <details>
-<summary>Deployed contracts</summary>
-
-**Unichain Sepolia (Chain ID 1301)** — deployed at block 54240730
-
-| Contract      | Address                                      |
-| ------------- | -------------------------------------------- |
-| PrismHook     | `0xbE169aD708CEA009236943607980DF7Ec8ec4700` |
-| LPYToken      | `0xf3077cCFBE8Be2cAAb7C5B763858e49b87f44513` |
-| LPDToken      | `0xd2AC3dB3021ea25d4D40Df5EF7764Aac10D87F3E` |
-| PrismCallback | `0x7cad80B54FEc3bEBf932688FDCdbD3926eedb1e1` |
-| PrismRouter   | _see `deployments/unichain-sepolia.json`_    |
-| USDC (Mock)   | `0x31d0220469e10c4E71834a79b1f276d740d3768F` |
-| PRISM (Mock)  | `0xCf864db2623735b28BEC4863490e19b13C7B1a5F` |
-
-Demo pool: USDC/PRISM, fee=500 (0.05%), tickSpacing=10 —
-poolId `0xa072e8c53693e3ad8ee2242ecbdad917c083bbf616328a4e2556fd73f72a8773`
-
-**Lasna (Chain ID 5318007)**
-
-| Contract | Address                                      |
-| -------- | -------------------------------------------- |
-| PrismRSC | `0xd42dbe0b1373B0FBBb78E01a9489362187858a7f` |
-
-</details>
-
-<details>
-<summary>IL calculation (oracle-free)</summary>
+<summary>Oracle-free IL calculation</summary>
 
 Based on the funded-LP formula from Lipton, Lucic, Sepp (2024). IL depends only on the price ratio, not absolute levels:
 
@@ -161,7 +180,18 @@ Based on the funded-LP formula from Lipton, Lucic, Sepp (2024). IL depends only 
 ε_funded = sqrtPriceCurrent / sqrtPriceEntry − 1
 ```
 
-All results WAD-scaled. No external oracle — computable from `StateLibrary.getSlot0`.
+All math WAD-scaled, computed from `StateLibrary.getSlot0` — no Chainlink, no TWAP. Oracle manipulation is self-defeating: inflating IL requires a large swap that costs the attacker more than the inflated payout.
+
+</details>
+
+<details>
+<summary>Security model</summary>
+
+- **CEI everywhere** — collateral vault is zeroed and all state staged *before* any external transfer, in every settlement path.
+- **Pull-based payments** — IL compensation and LP-D remainders are staged in claimable mappings, never pushed (ERC-1155 transfer callbacks are a reentrancy surface).
+- **Claim-time ownership** — IL compensation goes to whoever holds LP-Y *at claim time* (`balanceOf` check), so it follows the token if sold.
+- **Immutable authorization** — `PrismCallback`'s authorized RSC sender is set at construction and can never change.
+- **Idempotent settlement** — `settled` flag checked before any vault math; force-settle, voluntary settle, and LP-exit all converge to identical accounting.
 
 </details>
 
@@ -175,34 +205,28 @@ AFTER_REMOVE_LIQUIDITY_FLAG  = 1 << 8
 Combined mask: 0x0700
 ```
 
-`afterSwap` is not used — fees collected lazily, no per-swap overhead.
-
-</details>
-
-<details>
-<summary>Build and test</summary>
-
-```bash
-cd Prism
-forge build
-forge test -vvv
-```
-
-65 tests, 7 required settlement cases. Coverage: 90%+ lines on PrismHook.
+`afterSwap` is deliberately not used — fees are collected lazily, keeping swap gas untouched.
 
 </details>
 
 <details>
 <summary>Known limitations</summary>
 
-- LP-D has no automatic price discovery at launch — requires a willing first buyer (protocol as its own LP-D buyer on cold start)
-- v1 targets token/USDC pairs only — volatile/volatile pairs require a different collateral model
-- LVR (loss-versus-rebalancing from arb) is not addressed
-- Order book capped at 20 active bids per pool (`MAX_BIDS_PER_POOL`) to bound `afterAddLiquidity` gas
+- LP-D has no automatic price discovery at launch — requires a willing first buyer (protocol as its own pool's LP-D buyer on cold start)
+- v1 targets token/USDC pairs — volatile/volatile pairs need a different collateral model
+- LVR (loss-versus-rebalancing) is not addressed
+- Order book capped at 20 active bids per pool to bound `afterAddLiquidity` gas
 
 </details>
 
 ---
+
+## More
+
+- **[prism.ayush.works](https://prism.ayush.works/)** — live dApp on Unichain Sepolia
+- [`RUNBOOK.md`](RUNBOOK.md) — step-by-step demo commands
+- [`reactive/PrismRSC.sol`](https://github.com/ayush18pop/Prism/blob/main/reactive/PrismRSC.sol) — Reactive Network integration
+- [`src/lib/ILMath.sol`](https://github.com/ayush18pop/Prism/blob/main/src/lib/ILMath.sol) — oracle-free IL math
 
 ## License
 
